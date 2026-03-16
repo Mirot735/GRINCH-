@@ -1,0 +1,192 @@
+#s-profile {
+  background: radial-gradient(ellipse at 50% 0%, #0d1a3a 0%, #071510 60%);
+  position: relative; z-index: 1;
+}
+.profile-scroll {
+  flex: 1; overflow-y: auto; width: 100%;
+  padding: 16px; display: flex; flex-direction: column;
+  gap: 12px; padding-bottom: 80px;
+}
+
+/* ── HERO ── */
+.profile-hero {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(46,204,113,.15);
+  border-radius: 18px; padding: 16px;
+}
+.profile-avatar-wrap { position: relative; flex-shrink: 0; }
+.profile-avatar {
+  width: 72px; height: 72px; border-radius: 18px;
+  background: linear-gradient(135deg,#0d3a1f,#1a5c35);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; border: 2px solid rgba(46,204,113,0.3);
+}
+.profile-skin-badge {
+  position: absolute; bottom: -4px; right: -4px;
+  background: linear-gradient(135deg,#f1c40f,#e67e22);
+  border-radius: 6px; padding: 2px 5px;
+  font-size: 9px; font-weight: 700;
+}
+.profile-hero-info { flex: 1; }
+.profile-name { font-size: 20px; font-weight: 800; color: white; margin-bottom: 2px; }
+.profile-id   { font-size: 11px; color: rgba(255,255,255,.4); margin-bottom: 6px; }
+.profile-level { display: flex; align-items: center; gap: 6px; }
+.profile-level-badge {
+  background: linear-gradient(135deg,#f1c40f22,#e67e2222);
+  border: 1px solid rgba(241,196,15,.3);
+  border-radius: 8px; padding: 3px 10px;
+  font-size: 11px; font-weight: 800; color: #f1c40f;
+}
+
+/* ── LEVEL PROGRESS BAR ── */
+.profile-lvl-progress {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(46,204,113,.12);
+  border-radius: 14px; padding: 14px 16px;
+}
+.plp-header {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 8px;
+}
+.plp-title  { font-size: 11px; font-weight: 800; color: rgba(255,255,255,.5); letter-spacing: .1em; text-transform: uppercase; }
+.plp-next   { font-size: 11px; color: #2ecc71; font-weight: 700; }
+.plp-bar-bg {
+  height: 8px; background: rgba(255,255,255,.08);
+  border-radius: 4px; overflow: hidden; margin-bottom: 6px;
+}
+.plp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2ecc71, #f1c40f);
+  border-radius: 4px;
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.plp-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: rgba(255,255,255,.3);
+}
+
+/* ── STATS GRID ── */
+.profile-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ps-card {
+  background: rgba(255,255,255,.04); border-radius: 14px; padding: 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.ps-card.green { border: 1px solid rgba(46,204,113,.2); }
+.ps-card.gold  { border: 1px solid rgba(241,196,15,.2); }
+.ps-card.blue  { border: 1px solid rgba(52,152,219,.2); }
+.ps-card.red   { border: 1px solid rgba(231,76,60,.2); }
+.ps-card-label { font-size: 10px; color: rgba(255,255,255,.5); font-weight: 700; letter-spacing: .05em; }
+.ps-card-val   { font-size: 26px; font-weight: 900; color: white; line-height: 1.1; }
+.ps-card.green .ps-card-val { color: #2ecc71; }
+.ps-card.gold  .ps-card-val { color: #f1c40f; }
+.ps-card.blue  .ps-card-val { color: #3498db; }
+.ps-card.red   .ps-card-val { color: #e74c3c; }
+.ps-card-sub   { font-size: 10px; color: rgba(255,255,255,.3); }
+
+/* ── SEASON BANK ── */
+.profile-season-card {
+  background: linear-gradient(135deg, rgba(241,196,15,.1), rgba(230,126,34,.07));
+  border: 1px solid rgba(241,196,15,.25);
+  border-radius: 16px; padding: 16px;
+  display: flex; align-items: center; gap: 14px;
+}
+.psc-icon { font-size: 36px; flex-shrink: 0; }
+.psc-info { flex: 1; }
+.psc-label { font-size: 10px; font-weight: 800; color: rgba(241,196,15,.7); letter-spacing: .15em; text-transform: uppercase; margin-bottom: 4px; }
+.psc-val   { font-size: 28px; font-weight: 900; color: #f1c40f; line-height: 1; }
+.psc-sub   { font-size: 11px; color: rgba(255,255,255,.4); margin-top: 2px; }
+.psc-rank  {
+  background: rgba(241,196,15,.15); border: 1px solid rgba(241,196,15,.3);
+  border-radius: 8px; padding: 4px 10px;
+  font-size: 11px; font-weight: 800; color: #f1c40f;
+  flex-shrink: 0;
+}
+
+/* ── SECTION TITLE ── */
+.profile-section-title {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: .15em; color: rgba(255,255,255,.4);
+  text-transform: uppercase; margin-bottom: 8px;
+}
+
+/* ── GAME HISTORY ── */
+.profile-history {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px; overflow: hidden;
+}
+.ph-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  transition: background .15s;
+}
+.ph-row:last-child { border-bottom: none; }
+.ph-row:active { background: rgba(255,255,255,.04); }
+.ph-num   { font-size: 10px; color: rgba(255,255,255,.25); width: 18px; text-align: right; flex-shrink: 0; }
+.ph-icon  { font-size: 20px; flex-shrink: 0; }
+.ph-info  { flex: 1; }
+.ph-score { font-size: 15px; font-weight: 800; color: #f1c40f; }
+.ph-meta  { font-size: 10px; color: rgba(255,255,255,.35); margin-top: 1px; }
+.ph-badge {
+  font-size: 9px; font-weight: 800; padding: 3px 8px;
+  border-radius: 6px; flex-shrink: 0;
+}
+.ph-badge.great { background: rgba(46,204,113,.15); color: #2ecc71; border: 1px solid rgba(46,204,113,.25); }
+.ph-badge.good  { background: rgba(241,196,15,.15); color: #f1c40f;  border: 1px solid rgba(241,196,15,.25); }
+.ph-badge.ok    { background: rgba(255,255,255,.07); color: rgba(255,255,255,.4); border: 1px solid rgba(255,255,255,.1); }
+
+/* ── INVENTORY ── */
+.profile-inv {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px; padding: 12px;
+}
+.pi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.pi-item {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px; padding: 12px 8px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.pi-item-icon { font-size: 28px; line-height: 1; }
+.pi-item-name { font-size: 10px; color: rgba(255,255,255,.5); }
+.pi-item-cnt  { font-size: 13px; font-weight: 800; color: #2ecc71; }
+
+/* ── WALLET ── */
+.wallet-card {
+  background: rgba(0,136,204,.06); border: 1px solid rgba(0,136,204,.2);
+  border-radius: 16px; padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.wc-title { font-size: 15px; font-weight: 800; color: white; }
+.wc-desc  { font-size: 12px; color: rgba(255,255,255,.5); line-height: 1.5; }
+.wc-connect-btn {
+  width: 100%; padding: 14px;
+  background: linear-gradient(135deg,#0088cc,#006699);
+  border: none; border-radius: 12px; color: white;
+  font-size: 14px; font-weight: 800; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: all .2s;
+}
+.wc-connect-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,136,204,.4); }
+.wc-connected { display: flex; flex-direction: column; gap: 8px; }
+.wc-conn-row  { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wc-conn-addr { font-size: 12px; color: #29b6f6; font-weight: 600; word-break: break-all; }
+.wc-disc-btn  {
+  background: rgba(231,76,60,.15); border: 1px solid rgba(231,76,60,.3);
+  border-radius: 8px; padding: 6px 12px;
+  color: #e74c3c; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+}
+
+/* ── PRIZE POOL BANNER ── */
+.profile-prize-banner {
+  background: linear-gradient(135deg, rgba(231,76,60,.12), rgba(192,57,43,.08));
+  border: 1px solid rgba(231,76,60,.25);
+  border-radius: 14px; padding: 14px 16px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.ppb-icon { font-size: 28px; flex-shrink: 0; }
+.ppb-text { font-size: 12px; color: rgba(255,255,255,.6); line-height: 1.6; }
+.ppb-text b { color: white; }
+.ppb-text span { color: #f1c40f; font-weight: 700; }

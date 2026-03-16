@@ -1,0 +1,4 @@
+#s-load {
+  background: radial-gradient(ellipse at 50% 30%, #0d3a1f 0%, #071510 70%);
+  justify-content:center; align-items:center; gap:0;
+}

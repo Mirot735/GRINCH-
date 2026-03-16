@@ -1,0 +1,10 @@
+#s-pvp { background: radial-gradient(ellipse at 50% 0%, #1a0a0a 0%, #071510 60%); }
+.pvp-online-bar { width:100%; background:rgba(231,76,60,0.1); border-bottom:1px solid rgba(231,76,60,0.2); padding:8px 16px; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.pvp-online-dot { width:8px; height:8px; background:#e74c3c; border-radius:50%; box-shadow:0 0 8px #e74c3c; animation:blink 1s infinite; }
+.pvp-online-count { font-size:12px; font-weight:700; color:#e74c3c; }
+.pvp-content { flex:1; width:100%; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
+.pvp-game-card:active { transform:scale(0.98); background:rgba(255,255,255,0.08); }
+.pvp-game-icon { width:56px; height:56px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; }
+.pvp-game-info { flex:1; }
+.pvp-game-name { font-size:16px; font-weight:700; margin-bottom:3px; }
+.pvp-game-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px; }

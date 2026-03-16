@@ -1,0 +1,2 @@
+.shop-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.shop-item-bg { position:absolute; right:-10px; top:50%; transform:translateY(-50%); font-size:64px; opacity:0.05; }
