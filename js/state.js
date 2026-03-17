@@ -9,6 +9,7 @@ const S = {
   refTonEarned: +localStorage.getItem('refTonEarned')||0,
   // Фикс null-кошелька: не берём если строка "null"
   wallet: (localStorage.getItem('wallet') && localStorage.getItem('wallet') !== 'null') ? localStorage.getItem('wallet') : null,
+  walletFull: (localStorage.getItem('walletFull') && localStorage.getItem('walletFull') !== 'null') ? localStorage.getItem('walletFull') : null,
   skin: localStorage.getItem('skin')||'default',
   inv: JSON.parse(localStorage.getItem('inv')||'{"slow":0,"autobet":0,"hp":0,"totem":0,"magnet":0,"star":0}'),
   questsDone: JSON.parse(localStorage.getItem('questsDone')||'[]'),
@@ -26,6 +27,7 @@ function save() {
   });
   // Чистим мусорный "null" из localStorage
   if(localStorage.getItem('wallet')==='null') localStorage.removeItem('wallet');
+  if(localStorage.getItem('walletFull')==='null') localStorage.removeItem('walletFull');
 }
 
 function getTodayKey() {
