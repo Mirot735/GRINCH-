@@ -113,10 +113,10 @@ function _invRenderBoosts() {
   });
 
   if (wrap.children.length === 0) {
-    grid.innerHTML = '<div style="text-align:center;padding:50px 20px;">'
-      + '<div style="font-size:48px;margin-bottom:12px;">🎒</div>'
-      + '<div style="font-size:15px;font-weight:700;color:rgba(255,255,255,0.6);">Инвентарь пуст</div>'
-      + '<div style="font-size:12px;color:rgba(255,255,255,0.35);margin-top:6px;">Купи предметы в магазине!</div>'
+    grid.innerHTML = '<div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;">'
+      + '<div style="font-size:56px;margin-bottom:14px;">🎒</div>'
+      + '<div style="font-size:16px;font-weight:900;color:rgba(255,255,255,0.7);">Инвентарь пуст</div>'
+      + '<div style="font-size:12px;color:rgba(255,255,255,0.35);margin-top:8px;line-height:1.6;">Купи предметы в магазине!</div>'
       + '</div>';
     return;
   }
