@@ -1,48 +1,72 @@
 // ══════════════════════════════════════════════════════
-// MINING SYSTEM — mining.js
+// MINING SYSTEM v2 — по макету
 // ══════════════════════════════════════════════════════
 
-// ── Инициализация S.miners если нет ──────────────────
-document.addEventListener('DOMContentLoaded', function() {
-  if (typeof S !== 'undefined') {
-    if (!S.miners) S.miners = JSON.parse(localStorage.getItem('miners')||'{}');
-    if (!S.miningPendingGifts)  S.miningPendingGifts  = +localStorage.getItem('miningPendingGifts')||0;
-    if (!S.miningPendingGrinch) S.miningPendingGrinch = +localStorage.getItem('miningPendingGrinch')||0;
+const MAX_MINERS_PER_TYPE = 8; // лимит на каждый тип шахты
+
+// ── Инициализация S.miners ────────────────────────────
+function initMining() {
+  if (typeof S === 'undefined') { console.warn('initMining: S не определён'); return; }
+
+  // S.miners берём из S (он уже загружен через save/load из grinch_state)
+  // Если всё равно пусто — пробуем старый ключ 'miners' как fallback
+  if (!S.miners || typeof S.miners !== 'object') {
+    try {
+      const old = localStorage.getItem('miners');
+      S.miners = old ? JSON.parse(old) : {};
+    } catch(e) { S.miners = {}; }
   }
-});
+
+  // miningPending тоже должны быть в S — если нет, берём из localStorage
+  if (!S.miningPendingGifts)  S.miningPendingGifts  = 0;
+  if (!S.miningPendingGrinch) S.miningPendingGrinch = 0;
+
+  // Если lastAccrue никогда не ставился — ставим сейчас
+  if (!localStorage.getItem('miningLastAccrue')) {
+    localStorage.setItem('miningLastAccrue', Date.now());
+  }
+
+  accrueMiningIncome();
+  renderMiningList();
+  updateMiningTimer();
+  fetchGrinchRate();
+}
 
 // ── Конфиг майнеров ───────────────────────────────────
 const MINERS_GIFTS = [
-  { id:'m_g1', name:'🧦 Носок Гринча',   icon:'🧦', level:1, price:5000,   currency:'grinch', incomeDay:250,  incomeType:'gifts',  desc:'Начальный майнер подарков' },
-  { id:'m_g2', name:'🎀 Похититель',     icon:'🎀', level:2, price:20000,  currency:'grinch', incomeDay:1000, incomeType:'gifts',  desc:'Похищает подарки каждый день' },
-  { id:'m_g3', name:'🌲 Гора подарков',  icon:'🌲', level:3, price:60000,  currency:'grinch', incomeDay:3000, incomeType:'gifts',  desc:'Целая гора украденных подарков' },
-  { id:'m_g4', name:'🏔️ Пещера злодея', icon:'🏔️', level:4, price:200000, currency:'grinch', incomeDay:10000,incomeType:'gifts',  desc:'Тайная пещера Гринча' },
-  { id:'m_g5', name:'🌟 Фабрика хаоса', icon:'🌟', level:5, price:600000, currency:'grinch', incomeDay:30000,incomeType:'gifts',  desc:'Фабрика по производству хаоса' },
+  { id:'m_g1', name:'Носок Гринча',  img:'assets/img/Image_318.jpg', rarity:'common',    level:1, price:5000,   currency:'grinch', incomeDay:250,   incomeType:'gifts', desc:'Начальный майнер подарков' },
+  { id:'m_g2', name:'Похититель',    img:'assets/img/Image_284.jpg', rarity:'rare',      level:2, price:20000,  currency:'grinch', incomeDay:1000,  incomeType:'gifts', desc:'Похищает подарки каждый день' },
+  { id:'m_g3', name:'Гора подарков', img:'assets/img/Image_256.jpg', rarity:'epic',      level:3, price:60000,  currency:'grinch', incomeDay:3000,  incomeType:'gifts', desc:'Целая гора украденных подарков' },
+  { id:'m_g4', name:'Пещера злодея', img:'assets/img/Image_168.jpg', rarity:'legendary', level:4, price:200000, currency:'grinch', incomeDay:10000, incomeType:'gifts', desc:'Тайная пещера Гринча' },
+  { id:'m_g5', name:'Фабрика хаоса', img:'assets/img/Image_268.jpg', rarity:'legendary', level:5, price:600000, currency:'grinch', incomeDay:30000, incomeType:'gifts', desc:'Фабрика по производству хаоса' },
 ];
 
 const MINERS_GRINCH = [
-  { id:'m_t1', name:'💰 Кошелёк вора',   icon:'💰', level:1, price:0.5,  currency:'ton', incomeDay:250,   incomeType:'grinch_real', desc:'Первый шаг к богатству' },
-  { id:'m_t2', name:'💵 Тайник Гринча',  icon:'💵', level:2, price:2,    currency:'ton', incomeDay:1000,  incomeType:'grinch_real', desc:'Секретный тайник с токенами' },
-  { id:'m_t3', name:'🌿 Зелёный банк',   icon:'🌿', level:3, price:5,    currency:'ton', incomeDay:2500,  incomeType:'grinch_real', desc:'Зелёный банк Гринча' },
-  { id:'m_t4', name:'🐋 Кит-злодей',     icon:'🐋', level:4, price:15,   currency:'ton', incomeDay:7500,  incomeType:'grinch_real', desc:'Для серьёзных злодеев' },
-  { id:'m_t5', name:'💫 Токен-империя',  icon:'💫', level:5, price:50,   currency:'ton', incomeDay:25000, incomeType:'grinch_real', desc:'Властелин токенов' },
+  { id:'m_t1', name:'Кошелёк вора',  img:'assets/img/miner_t1.png', rarity:'common',    level:1, price:0.5, currency:'ton', incomeDay:250,   incomeType:'grinch_real', desc:'Первый шаг к богатству' },
+  { id:'m_t2', name:'Тайник Гринча', img:'assets/img/miner_t2.png', rarity:'rare',      level:2, price:2,   currency:'ton', incomeDay:1000,  incomeType:'grinch_real', desc:'Секретный тайник с токенами' },
+  { id:'m_t3', name:'Зелёный банк',  img:'assets/img/miner_t3.png', rarity:'epic',      level:3, price:5,   currency:'ton', incomeDay:2500,  incomeType:'grinch_real', desc:'Зелёный банк Гринча' },
+  { id:'m_t4', name:'Кит-злодей',    img:'assets/img/miner_t4.png', rarity:'legendary', level:4, price:15,  currency:'ton', incomeDay:7500,  incomeType:'grinch_real', desc:'Для серьёзных злодеев' },
+  { id:'m_t5', name:'Токен-империя', img:'assets/img/miner_t5.png', rarity:'legendary', level:5, price:50,  currency:'ton', incomeDay:25000, incomeType:'grinch_real', desc:'Властелин токенов' },
 ];
 
-// ── Текущий курс GRINCH ───────────────────────────────
-let grinchRate = { tonPerMillion: 3.54, updatedAt: 0 };
+// Цвета редкости
+const RARITY_COLORS = {
+  common:    { border:'#2ecc71',  bg:'rgba(3,12,5,0.97)',   label:'Обычный',    color:'#2ecc71',  glow:'rgba(46,204,113,0.5)' },
+  rare:      { border:'#3498db',  bg:'rgba(3,8,18,0.97)',   label:'Редкий',     color:'#3498db',  glow:'rgba(52,152,219,0.5)' },
+  epic:      { border:'#9b59b6',  bg:'rgba(10,3,18,0.97)',  label:'Эпический',  color:'#9b59b6',  glow:'rgba(155,89,182,0.5)' },
+  legendary: { border:'#f1c40f',  bg:'rgba(12,8,1,0.97)',   label:'Легендарный',color:'#f1c40f',  glow:'rgba(241,196,15,0.5)' },
+};
+
+// ── Курс GRINCH ───────────────────────────────────────
+let grinchRate = { tokensPerTon: 141000, updatedAt: 0 };
 let currentMiningTab = 0;
 
-// ── GRINCH_CONTRACT уже объявлен в config.js ─────────
-// (убрали дублирующий const — вызывал SyntaxError)
-// Native TON address на STON.fi
 const TON_ADDRESS = 'EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c';
 
 async function fetchGrinchRate() {
   const el = document.getElementById('grinchRateDisplay');
   if (el) el.textContent = '⏳ Загрузка...';
 
-  // ── Метод 1: STON.fi — пул GRINCH/TON по market ──────
-  // GET /v1/pools/by_market/{asset0}/{asset1}
   try {
     const res = await fetch(
       `https://api.ston.fi/v1/pools/by_market/${GRINCH_CONTRACT}/${TON_ADDRESS}`,
@@ -50,7 +74,6 @@ async function fetchGrinchRate() {
     );
     if (res.ok) {
       const data = await res.json();
-      // STON.fi v1 возвращает { pool: {...} } или { pool_list: [...] }
       let pools = [];
       if (data.pool) pools = [data.pool];
       else if (data.pool_list) pools = data.pool_list;
@@ -60,237 +83,182 @@ async function fetchGrinchRate() {
 
       for (const pool of pools) {
         if (!pool) continue;
-        const r0 = parseFloat(pool.reserve0 || pool.token0_reserve || 0);
-        const r1 = parseFloat(pool.reserve1 || pool.token1_reserve || 0);
-        // Резервы — огромные числа (18+ знаков), используем BigInt для точности
         const r0str = String(pool.reserve0 || pool.token0_reserve || '0');
         const r1str = String(pool.reserve1 || pool.token1_reserve || '0');
         if (r0str !== '0' && r1str !== '0') {
           try {
-            const r0b = BigInt(r0str);
-            const r1b = BigInt(r1str);
-            // by_market/GRINCH/TON → reserve0=GRINCH, reserve1=TON (оба 9 decimals)
-            // tokensPerTon = reserve0 / reserve1
-            const t0 = (pool.token0_address || pool.asset0_address || pool.asset0 || '').toLowerCase();
+            const r0b = BigInt(r0str), r1b = BigInt(r1str);
+            const t0 = (pool.token0_address || pool.asset0_address || '').toLowerCase();
             let grinchR = r0b, tonR = r1b;
-            // Если token0 НЕ GRINCH — меняем местами
-            if (t0 && t0.length > 10 && !t0.includes(GRINCH_CONTRACT.toLowerCase().slice(2, 15))) {
+            if (t0 && t0.length > 10 && !t0.includes(GRINCH_CONTRACT.toLowerCase().slice(2,15))) {
               grinchR = r1b; tonR = r0b;
             }
             if (tonR > 0n) {
-              // Умножаем на 1000 для сохранения дробной части
-              const tokensPerTon = Number((grinchR * 1000n) / tonR) / 1000;
-              if (tokensPerTon > 10) {
-                _saveRate(Math.round(tokensPerTon), null);
-                _showRate(el, Math.round(tokensPerTon));
-                return;
-              }
+              const tpt = Number((grinchR * 1000n) / tonR) / 1000;
+              if (tpt > 10) { _saveRate(Math.round(tpt), null); _showRate(el, Math.round(tpt)); return; }
             }
-          } catch(bigIntErr) {
-            // BigInt не поддерживается — fallback на float
+          } catch(e) {
             const r0f = parseFloat(r0str), r1f = parseFloat(r1str);
             if (r0f > 0 && r1f > 0) {
-              const tokensPerTon = Math.round(r0f / r1f);
-              if (tokensPerTon > 10) {
-                _saveRate(tokensPerTon, null);
-                _showRate(el, tokensPerTon);
-                return;
-              }
+              const tpt = Math.round(r0f / r1f);
+              if (tpt > 10) { _saveRate(tpt, null); _showRate(el, tpt); return; }
             }
           }
         }
       }
     }
-  } catch(e) { console.warn('STON pool:', e); }
+  } catch(e) {}
 
-  // ── Метод 2: STON.fi asset — dex_usd_price ────────────
-  // GET /v1/assets/{address}
   try {
-    const [grinchRes, tonRes] = await Promise.all([
+    const [gR, tR] = await Promise.all([
       fetch(`https://api.ston.fi/v1/assets/${GRINCH_CONTRACT}`),
       fetch(`https://api.ston.fi/v1/assets/${TON_ADDRESS}`)
     ]);
-    if (grinchRes.ok && tonRes.ok) {
-      const gData = await grinchRes.json();
-      const tData = await tonRes.json();
-      const grinchUsd = parseFloat((gData.asset||gData).dex_usd_price || (gData.asset||gData).dex_price_usd || 0);
-      const tonUsd    = parseFloat((tData.asset||tData).dex_usd_price || (tData.asset||tData).dex_price_usd || 0);
-      if (grinchUsd > 0 && tonUsd > 0) {
-        const tokensPerTon = Math.round(tonUsd / grinchUsd);
-        if (tokensPerTon > 100) {
-          _saveRate(tokensPerTon, grinchUsd);
-          _showRate(el, tokensPerTon);
-          return;
-        }
+    if (gR.ok && tR.ok) {
+      const gD = await gR.json(), tD = await tR.json();
+      const gUsd = parseFloat((gD.asset||gD).dex_usd_price || 0);
+      const tUsd = parseFloat((tD.asset||tD).dex_usd_price || 0);
+      if (gUsd > 0 && tUsd > 0) {
+        const tpt = Math.round(tUsd / gUsd);
+        if (tpt > 100) { _saveRate(tpt, gUsd); _showRate(el, tpt); return; }
       }
     }
-  } catch(e) { console.warn('STON asset:', e); }
+  } catch(e) {}
 
-  // ── Метод 3: TonAPI rates ─────────────────────────────
   try {
-    const res = await fetch(
-      `https://tonapi.io/v2/rates?tokens=${GRINCH_CONTRACT}&currencies=ton`,
-      { headers: { 'Accept': 'application/json' } }
-    );
+    const res = await fetch(`https://tonapi.io/v2/rates?tokens=${GRINCH_CONTRACT}&currencies=ton`);
     if (res.ok) {
       const data = await res.json();
-      const priceInTon = parseFloat(
-        data.rates?.[GRINCH_CONTRACT]?.prices?.TON || 0
-      );
-      if (priceInTon > 0) {
-        const tokensPerTon = Math.round(1 / priceInTon);
-        if (tokensPerTon > 100) {
-          _saveRate(tokensPerTon, null);
-          _showRate(el, tokensPerTon);
-          return;
-        }
-      }
+      const p = parseFloat(data.rates?.[GRINCH_CONTRACT]?.prices?.TON || 0);
+      if (p > 0) { const tpt = Math.round(1/p); if (tpt > 100) { _saveRate(tpt, null); _showRate(el, tpt); return; } }
     }
-  } catch(e) { console.warn('TonAPI:', e); }
+  } catch(e) {}
 
-  // ── Метод 4: DeDust резервы пула ──────────────────────
-  try {
-    const res = await fetch(
-      `https://api.dedust.io/v2/pools?address=${GRINCH_CONTRACT}`
-    );
-    if (res.ok) {
-      const pools = await res.json();
-      const p = Array.isArray(pools) ? pools[0] : pools;
-      if (p?.reserves) {
-        const [r0, r1] = p.reserves;
-        const tokensPerTon = Math.round(parseFloat(r0) / parseFloat(r1));
-        if (tokensPerTon > 100) {
-          _saveRate(tokensPerTon, null);
-          _showRate(el, tokensPerTon);
-          return;
-        }
-      }
-    }
-  } catch(e) { console.warn('DeDust:', e); }
-
-  // ── Все не сработали — кэш или хардкод ───────────────
   _useCachedRate(el);
 }
 
-function _saveRate(tokensPerTon, usdPrice) {
-  grinchRate = { tokensPerTon, usdPrice, updatedAt: Date.now() };
-  localStorage.setItem('grinchRate', JSON.stringify(grinchRate));
-}
-
-function _showRate(el, tokensPerTon) {
-  if (el) el.textContent = `1 TON = ~${tokensPerTon.toLocaleString()} GRINCH`;
-  // Обновляем только строки цен в уже отрисованных карточках
-  _updatePricesInCards();
-}
-
-function _updatePricesInCards() {
-  // Обновляем отображение цен в уже отрисованных карточках
-  // без полного перерендера
-  document.querySelectorAll('[data-miner-price]').forEach(el => {
-    const minerId = el.getAttribute('data-miner-price');
-    const miner = [...MINERS_GIFTS, ...MINERS_GRINCH].find(m => m.id === minerId);
-    if (miner && miner.currency === 'ton') {
-      const tpt = grinchRate.tokensPerTon || 141000;
-      el.textContent = miner.price + ' TON ≈ ' + Math.round(miner.price * tpt).toLocaleString() + ' G';
-    }
-  });
-}
-
+function _saveRate(tpt, usd) { grinchRate = { tokensPerTon:tpt, usdPrice:usd, updatedAt:Date.now() }; localStorage.setItem('grinchRate', JSON.stringify(grinchRate)); }
+function _showRate(el, tpt) { if (el) el.textContent = '1 TON = ~' + tpt.toLocaleString() + ' GRINCH'; updateMiningStats(); }
 function _useCachedRate(el) {
-  const cached = localStorage.getItem('grinchRate');
-  if (cached) {
-    try {
-      grinchRate = JSON.parse(cached);
-      const mins = Math.floor((Date.now() - grinchRate.updatedAt) / 60000);
-      if (el) el.textContent = `1 TON ≈ ${(grinchRate.tokensPerTon||141000).toLocaleString()} GRINCH (кэш ${mins}м)`;
-    } catch(e) {}
-  } else {
-    grinchRate.tokensPerTon = 141000;
-    if (el) el.textContent = '1 TON ≈ 141,000 GRINCH';
-  }
+  const c = localStorage.getItem('grinchRate');
+  if (c) { try { grinchRate = JSON.parse(c); const m = Math.floor((Date.now()-grinchRate.updatedAt)/60000); if(el) el.textContent = '1 TON ≈ '+(grinchRate.tokensPerTon||141000).toLocaleString()+' GRINCH (кэш '+m+'м)'; } catch(e){} }
+  else { grinchRate.tokensPerTon = 141000; if(el) el.textContent = '1 TON ≈ 141,000 GRINCH'; }
 }
 
 // ── Переключение вкладок ──────────────────────────────
 function switchMiningTab(tab) {
   currentMiningTab = tab;
-  const t0 = document.getElementById('miningTab0');
-  const t1 = document.getElementById('miningTab1');
-  if (tab === 0) {
-    if(t0){t0.style.background='rgba(241,196,15,0.25)';t0.style.color='#f1c40f';t0.style.boxShadow='none';}
-    if(t1){t1.style.background='transparent';t1.style.color='rgba(255,255,255,0.4)';}
-  } else {
-    if(t1){t1.style.background='rgba(46,204,113,0.25)';t1.style.color='#2ecc71';}
-    if(t0){t0.style.background='transparent';t0.style.color='rgba(255,255,255,0.4)';}
-  }
-  renderMiningList(); // рендерим сразу — курс уже в grinchRate
+  ['miningTab0','miningTab1'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const active = i === tab;
+    el.style.background = active ? (i===0?'rgba(241,196,15,0.25)':'rgba(46,204,113,0.25)') : 'transparent';
+    el.style.color = active ? (i===0?'#f1c40f':'#2ecc71') : 'rgba(255,255,255,0.4)';
+    el.style.fontWeight = active ? '800' : '600';
+  });
+  renderMiningList();
 }
 
 // ── Отрисовка списка майнеров ─────────────────────────
 function renderMiningList() {
   const list = document.getElementById('miningList');
-  if (!list) { console.warn('miningList not found'); return; }
+  if (!list) return;
   list.innerHTML = '';
 
   const miners = currentMiningTab === 0 ? MINERS_GIFTS : MINERS_GRINCH;
-  // Безопасно получаем miners — даже если S.miners не определён
   const myMiners = (typeof S !== 'undefined' && S.miners) ? S.miners : {};
-
-  if (!miners || miners.length === 0) {
-    list.innerHTML = '<div style="color:red;padding:20px;">Ошибка: нет данных майнеров</div>';
-    return;
-  }
+  const isGiftTab = currentMiningTab === 0;
 
   miners.forEach(function(m) {
     const owned = myMiners[m.id] || 0;
-    const hasOne = owned > 0;
-    const incomePerDay = m.incomeDay * owned;
-    const isGift = m.incomeType === 'gifts';
-    const color = isGift ? '#f1c40f' : '#2ecc71';
-    const borderColor = isGift ? 'rgba(241,196,15,0.35)' : 'rgba(46,204,113,0.35)';
-    const btnColor = isGift ? '#e67e22' : '#27ae60';
-    const txtColor = isGift ? '#1a0a00' : '#fff';
+    const totalIncome = m.incomeDay * owned;
+    const roi = m.currency === 'grinch' ? Math.round(m.price / m.incomeDay) : 20;
+    const rarity = RARITY_COLORS[m.rarity] || RARITY_COLORS.common;
+    const incomeIcon = isGiftTab ? '🎁' : '💎';
+
+    const EMOJI_GIFTS = ['🧦','🎀','🌲','🏔️','🌟'];
+    const EMOJI_GRINCH = ['💰','💵','🌿','🐋','💫'];
+    const emoji = isGiftTab ? EMOJI_GIFTS[m.level-1] : EMOJI_GRINCH[m.level-1];
+
     const priceStr = m.currency === 'grinch'
       ? m.price.toLocaleString() + ' GRINCH'
       : m.price + ' TON';
 
+    // ── Карточка ──
     const card = document.createElement('div');
-    card.style.cssText = 'background:linear-gradient(135deg,rgba(0,0,0,0.7),rgba(0,0,0,0.5));border:1.5px solid ' + borderColor + ';border-radius:18px;padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:2px;';
+    card.style.cssText = `background:${rarity.bg};border:1.5px solid ${rarity.border};border-radius:14px;padding:10px;display:flex;align-items:flex-start;gap:10px;position:relative;`;
 
+    // ── Иконка ──
     const iconDiv = document.createElement('div');
-    iconDiv.style.cssText = 'width:56px;height:56px;border-radius:14px;background:rgba(0,0,0,0.4);border:1px solid ' + borderColor + ';display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;';
-    iconDiv.textContent = m.icon;
-
-    const infoDiv = document.createElement('div');
-    infoDiv.style.cssText = 'flex:1;min-width:0;';
-    infoDiv.innerHTML =
-      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">' +
-        '<span style="font-size:13px;font-weight:800;color:#fff;">' + m.name + '</span>' +
-        '<span style="font-size:8px;font-weight:700;color:' + color + ';background:rgba(0,0,0,0.3);border:1px solid ' + borderColor + ';border-radius:5px;padding:1px 5px;">LVL ' + m.level + '</span>' +
-      '</div>' +
-      '<div style="font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:5px;">' + m.desc + '</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-        '<span style="background:rgba(0,0,0,0.3);border-radius:7px;padding:3px 7px;font-size:10px;font-weight:700;color:' + color + ';">+' + m.incomeDay.toLocaleString() + '/день</span>' +
-        '<span style="background:rgba(0,0,0,0.3);border-radius:7px;padding:3px 7px;font-size:10px;font-weight:700;color:rgba(255,255,255,0.4);">+' + Math.floor(m.incomeDay/24) + '/час</span>' +
-      '</div>' +
-      (hasOne ? '<div style="margin-top:5px;font-size:10px;color:#2ecc71;font-weight:700;">✅ У тебя: ' + owned + ' шт → +' + incomePerDay.toLocaleString() + '/день</div>' : '');
-
-    const btnDiv = document.createElement('div');
-    btnDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;';
-
-    const priceEl = document.createElement('div');
-    priceEl.style.cssText = 'font-size:10px;font-weight:800;color:' + color + ';text-align:center;';
-    priceEl.textContent = priceStr;
-
-    const btn = document.createElement('button');
-    btn.style.cssText = 'padding:8px 12px;background:linear-gradient(135deg,' + color + ',' + btnColor + ');border:none;border-radius:10px;font-size:11px;font-weight:900;color:' + txtColor + ';cursor:pointer;white-space:nowrap;';
-    btn.textContent = hasOne ? '+ Ещё' : '⛏️ Купить';
-    btn.onclick = function() { buyMiner(m.id); };
-
-    btnDiv.appendChild(priceEl);
-    btnDiv.appendChild(btn);
+    iconDiv.style.cssText = `width:72px;height:72px;border-radius:12px;background:rgba(0,0,0,0.5);border:1.5px solid ${rarity.border};display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;overflow:hidden;`;
+    const img = document.createElement('img');
+    img.src = m.img;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:10px;';
+    img.onerror = function() { this.style.display='none'; iconDiv.innerHTML += '<span style="font-size:30px;">'+emoji+'</span>'; };
+    iconDiv.appendChild(img);
     card.appendChild(iconDiv);
-    card.appendChild(infoDiv);
-    card.appendChild(btnDiv);
+
+    // ── Центр ──
+    const center = document.createElement('div');
+    center.style.cssText = 'flex:1;min-width:0;overflow:hidden;padding-right:2px;';
+    center.innerHTML =
+      '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;min-width:0;">' +
+        '<span style="font-size:12px;font-weight:900;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0;">' + m.name + '</span>' +
+        '<span style="font-size:8px;font-weight:800;background:rgba(0,0,0,0.6);border:1px solid '+rarity.border+';color:'+rarity.color+';border-radius:4px;padding:1px 4px;flex-shrink:0;">LVL '+m.level+'</span>' +
+      '</div>' +
+      (owned > 0
+        ? '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚡×<b style="color:'+rarity.color+'">'+owned+'</b> <b style="color:#ffe44d">+'+totalIncome.toLocaleString()+'/д</b></div>'
+        : '<div style="font-size:9px;color:rgba(255,255,255,0.4);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+m.desc+'</div>') +
+      '<div style="display:flex;gap:4px;align-items:center;">' +
+        '<span style="background:rgba(0,0,0,0.5);border:1px solid '+rarity.border+';border-radius:5px;padding:1px 5px;font-size:9px;font-weight:900;color:#ffe44d;white-space:nowrap;">🎁+'+m.incomeDay.toLocaleString()+'/д</span>' +
+        '<span style="font-size:8px;color:rgba(255,255,255,0.35);white-space:nowrap;">⏱'+roi+'д</span>' +
+      '</div>';
+    card.appendChild(center);
+
+    // ── Правый блок: цена + кнопки + точки ──
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;';
+    const priceLabel = document.createElement('div');
+    priceLabel.style.cssText = 'font-size:9px;font-weight:900;color:'+rarity.color+';white-space:nowrap;';
+    priceLabel.textContent = priceStr;
+    right.appendChild(priceLabel);
+
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:3px;';
+
+    const isMaxed = owned >= MAX_MINERS_PER_TYPE;
+    if (isMaxed) {
+      const bLocked = document.createElement('button');
+      bLocked.style.cssText = 'padding:5px 8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:7px;font-size:9px;font-weight:900;color:rgba(255,255,255,0.4);cursor:default;white-space:nowrap;';
+      bLocked.innerHTML = '🔒 ПОЛНЫЙ';
+      bLocked.disabled = true;
+      btns.appendChild(bLocked);
+    } else {
+      const bMain = document.createElement('button');
+      if (owned > 0) {
+        bMain.style.cssText = 'padding:6px 12px;background:linear-gradient(135deg,#f1c40f,#e67e00);border:none;border-radius:7px;font-size:11px;font-weight:900;color:#1a0a00;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap;';
+        bMain.innerHTML = '⛏️ МАКС';
+        bMain.onclick = function(){ buyMiner(m.id, 'max'); };
+      } else {
+        bMain.style.cssText = 'padding:6px 12px;background:linear-gradient(135deg,#27ae60,#1a7a40);border:1px solid rgba(46,204,113,0.5);border-radius:7px;font-size:11px;font-weight:900;color:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap;';
+        bMain.innerHTML = '⛏️ Купить';
+        bMain.onclick = function(){ buyMiner(m.id, 1); };
+      }
+      btns.appendChild(bMain);
+    }
+    right.appendChild(btns);
+
+    if (owned > 0) {
+      const maxD = 8, filled = Math.min(owned, maxD);
+      let d = '<div style="font-size:8px;color:rgba(255,255,255,0.3);text-align:right;margin-top:1px;">Прид:'+owned+'</div><div style="display:flex;gap:1px;justify-content:flex-end;margin-top:2px;">';
+      for (let i = 0; i < maxD; i++) d += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+(i<filled?rarity.color:'rgba(255,255,255,0.1)')+'"></span>';
+      d += '</div>';
+      const dotsEl = document.createElement('div');
+      dotsEl.innerHTML = d;
+      right.appendChild(dotsEl);
+    }
+
+    card.appendChild(right);
     list.appendChild(card);
   });
 
@@ -298,231 +266,267 @@ function renderMiningList() {
 }
 
 // ── Купить майнер ─────────────────────────────────────
-function buyMiner(id) {
+function buyMiner(id, qty) {
   const miner = [...MINERS_GIFTS, ...MINERS_GRINCH].find(m => m.id === id);
   if (!miner) return;
+  if (!S.miners) S.miners = {};
 
-  if (miner.currency === 'grinch') {
-    if (S.grinch < miner.price) {
-      toast('❌ Недостаточно GRINCH! Нужно ' + miner.price.toLocaleString());
-      return;
-    }
-    S.grinch -= miner.price;
-    if (!S.miners) S.miners = {};
-    S.miners[miner.id] = (S.miners[miner.id] || 0) + 1;
-    save();
-    toast('⛏️ ' + miner.name + ' куплен! +' + miner.incomeDay.toLocaleString() + '/день');
-    renderMiningList();
-    updateMenu();
-  } else {
-    // TON покупка — напрямую через sendTonPayment
-    buyMinerTon(miner);
-  }
-}
+  const owned = S.miners[miner.id] || 0;
 
-// ── Покупка TON-майнера — СРАЗУ открывает Tonkeeper ────────
-async function buyMinerTon(miner) {
-  if (!window.getTonUI) { toast('TON Connect не загружен'); return; }
-
-  // Если кошелёк не подключён — подключаем
-  if (!S.walletFull) {
-    toast('💎 Сначала подключи кошелёк!');
-    try {
-      const ui = getTonUI();
-      await ui.openModal();
-      // После подключения повторяем
-      const check = setInterval(() => {
-        if (S.walletFull) { clearInterval(check); buyMinerTon(miner); }
-      }, 500);
-      setTimeout(() => clearInterval(check), 30000);
-    } catch(e) {}
+  // Проверяем лимит
+  if (owned >= MAX_MINERS_PER_TYPE) {
+    toast('🔒 Максимум ' + MAX_MINERS_PER_TYPE + ' шахт этого типа!');
     return;
   }
 
-  // Кошелёк подключён — СРАЗУ отправляем транзакцию
-  const ui = getTonUI();
-  const nanoTon = Math.round(miner.price * 1_000_000_000).toString();
-  const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || S.nick;
-  const comment = 'grinch_' + tgId + '_miner_' + miner.id;
-  const payload = _buildCommentPayload(comment);
+  // Считаем сколько можно ещё купить
+  const canBuy = MAX_MINERS_PER_TYPE - owned;
 
-  // Показываем статус "открываем кошелёк"
-  showTxStatusModal('pending', { grinch: 0, label: miner.name });
+  // Количество
+  let count = 1;
+  if (qty === 'max') {
+    const byBalance = miner.currency === 'grinch' ? Math.floor(S.grinch / miner.price) : 1;
+    count = Math.min(canBuy, byBalance);
+    if (count <= 0) { toast('❌ Недостаточно ' + (miner.currency === 'grinch' ? 'GRINCH' : 'TON') + '!'); return; }
+  } else {
+    count = Math.min(qty || 1, canBuy);
+  }
 
-  try {
-    const tx = {
-      validUntil: Math.floor(Date.now() / 1000) + 600,
-      messages: [{
-        address: typeof MINING_WALLET !== 'undefined' ? MINING_WALLET : PROJECT_WALLET,
-        amount: nanoTon,
-        payload: payload
-      }]
-    };
+  if (miner.currency === 'grinch') {
+    const total = miner.price * count;
+    if (S.grinch < total) { toast('❌ Нужно ' + total.toLocaleString() + ' GRINCH!'); return; }
 
-    await ui.sendTransaction(tx);
+    accrueMiningIncome();
 
-    // Успех
-    showTxStatusModal('success', { grinch: 0, label: miner.name + ' активируется!' });
-    toast('⛏️ Оплата прошла! Майнер будет зачислен в течение 1-2 минут');
-    setTimeout(() => closeTxStatusModal(), 4000);
+    S.grinch -= total;
+    const hadMiners = Object.values(S.miners).some(v => v > 0);
+    S.miners[miner.id] = owned + count;
+    if (!hadMiners) localStorage.setItem('miningLastAccrue', Date.now());
+    localStorage.setItem('miners', JSON.stringify(S.miners));
+    save();
 
-  } catch(e) {
-    if (e?.message?.includes('User rejects') || e?.message?.includes('cancel')) {
-      showTxStatusModal('cancelled', {});
-    } else {
-      showTxStatusModal('error', {});
-      console.error('Miner tx error:', e);
-    }
-    setTimeout(() => closeTxStatusModal(), 3000);
+    const newOwned = S.miners[miner.id];
+    const limitMsg = newOwned >= MAX_MINERS_PER_TYPE ? ' (МАКС!)' : '';
+    toast('⛏️ ' + miner.name + ' ×' + count + ' куплен!' + limitMsg);
+    renderMiningList();
+    updateMenu();
+  } else {
+    if (typeof buyMinerTon === 'function') buyMinerTon(miner);
+    else toast('Ошибка: TON функции не загружены');
   }
 }
 
-// ── Статистика дохода ─────────────────────────────────
+// ── Статистика ────────────────────────────────────────
 function updateMiningStats() {
-  const myMiners = S.miners || {};
+  const myMiners = (typeof S !== 'undefined' && S.miners) ? S.miners : {};
   let giftsPerDay = 0, grinchPerDay = 0;
+  let bestMiner = null, bestIncome = 0;
+  let totalCount = 0;
 
   MINERS_GIFTS.forEach(m => {
-    giftsPerDay += (myMiners[m.id] || 0) * m.incomeDay;
+    const cnt = myMiners[m.id] || 0;
+    const income = cnt * m.incomeDay;
+    giftsPerDay += income;
+    totalCount += cnt;
+    if (income > bestIncome) { bestIncome = income; bestMiner = m.name + (cnt > 1 ? ' ×'+cnt : ''); }
   });
   MINERS_GRINCH.forEach(m => {
-    grinchPerDay += (myMiners[m.id] || 0) * m.incomeDay;
+    const cnt = myMiners[m.id] || 0;
+    const income = cnt * m.incomeDay;
+    grinchPerDay += income;
+    totalCount += cnt;
+    if (income > bestIncome) { bestIncome = income; bestMiner = m.name + (cnt > 1 ? ' ×'+cnt : ''); }
   });
 
-  const el = document.getElementById('myMiningIncome');
-  if (el) {
-    if (giftsPerDay === 0 && grinchPerDay === 0) {
-      el.textContent = 'Нет майнеров';
-      el.style.color = 'rgba(255,255,255,0.4)';
+  // Кнопка — показывает накопленную сумму (текст в span поверх картинки)
+  const claimText = document.getElementById('miningClaimText');
+  const claimBtn = document.getElementById('miningClaimBtn');
+  if (claimText) {
+    const pendingG = S?.miningPendingGifts || 0;
+    const pendingGr = S?.miningPendingGrinch || 0;
+    if (pendingG > 0 && pendingGr > 0) {
+      claimText.textContent = 'Собрать ' + pendingG.toLocaleString() + ' 🎁 + ' + pendingGr.toLocaleString() + ' GRINCH';
+      if (claimBtn) claimBtn.style.opacity = '1';
+    } else if (pendingG > 0) {
+      claimText.textContent = 'Собрать ' + pendingG.toLocaleString() + ' подарков';
+      if (claimBtn) claimBtn.style.opacity = '1';
+    } else if (pendingGr > 0) {
+      claimText.textContent = 'Собрать ' + pendingGr.toLocaleString() + ' GRINCH';
+      if (claimBtn) claimBtn.style.opacity = '1';
     } else {
-      el.innerHTML = (giftsPerDay>0?`🎁 <b style="color:#f1c40f">+${giftsPerDay.toLocaleString()}</b>/день  `:'') +
-                     (grinchPerDay>0?`🟢 <b style="color:#2ecc71">+${grinchPerDay.toLocaleString()}</b>/день`:'');
+      claimText.textContent = 'Собрать всё';
+      if (claimBtn) claimBtn.style.opacity = '0.55';
     }
+  }
+
+  // Доход в шапке
+  const incomeEl = document.getElementById('miningTotalIncome');
+  if (incomeEl) {
+    const parts = [];
+    if (giftsPerDay > 0) parts.push('+' + giftsPerDay.toLocaleString() + ' 🎁');
+    if (grinchPerDay > 0) parts.push('+' + grinchPerDay.toLocaleString() + ' 🟢');
+    incomeEl.textContent = parts.length ? parts.join('  ') : 'Нет майнеров';
+  }
+
+  // Следующий уровень — стрелка
+  const nextEl = document.getElementById('miningNextIncome');
+  if (nextEl && giftsPerDay > 0) {
+    const nextTier = MINERS_GIFTS.find(m => m.incomeDay > giftsPerDay / Math.max(1, Object.keys(myMiners).length));
+    if (nextTier) nextEl.textContent = '→ ' + (giftsPerDay + nextTier.incomeDay).toLocaleString() + '/день';
+  }
+
+  // Статистика внизу — как на макете (прозрачная рамка, 2 строки)
+  const statsEl = document.getElementById('miningStatsBar');
+  if (statsEl) {
+    const total = giftsPerDay + grinchPerDay;
+    const perHour = Math.floor(total / 24);
+    statsEl.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+        '<span style="color:rgba(255,255,255,0.5);font-size:11px;">Общий доход: <b style="color:#f1c40f;">' + total.toLocaleString() + '/день</b></span>' +
+        '<span style="color:rgba(255,255,255,0.5);font-size:11px;">Всего шахт: <b style="color:#fff;">' + totalCount + '</b></span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        (bestMiner ? '<span style="color:rgba(255,255,255,0.4);font-size:11px;">Лучшая шахта: <b style="color:#2ecc71;">' + bestMiner + '</b></span>' : '<span></span>') +
+        (perHour > 0 ? '<span style="color:rgba(255,255,255,0.35);font-size:10px;">~+' + perHour.toLocaleString() + '/час</span>' : '') +
+      '</div>';
   }
 
   // Превью на кнопке в меню
   const preview = document.getElementById('miningIncomePreview');
   if (preview) {
-    const perHour = Math.floor(giftsPerDay/24);
-    preview.textContent = perHour > 0 ? '+'+perHour+'/час' : '0/час';
+    const perHour = Math.floor((giftsPerDay + grinchPerDay) / 24);
+    preview.textContent = perHour > 0 ? '+' + perHour + '/час' : '0/час';
   }
 }
 
 // ── Накопление дохода ─────────────────────────────────
 function accrueMiningIncome() {
-  const myMiners = S.miners || {};
-  const lastAccrue = +localStorage.getItem('miningLastAccrue') || Date.now();
-  const now = Date.now();
-  const hoursElapsed = (now - lastAccrue) / 3600000;
+  if (typeof S === 'undefined') return;
+  if (!S.miners) S.miners = {};
+  const myMiners = S.miners;
+  const hasMiners = Object.values(myMiners).some(v => v > 0);
+  if (!hasMiners) return;
 
-  if (hoursElapsed < 0.016) return; // меньше минуты — пропускаем
+  const now = Date.now();
+  const stored = +localStorage.getItem('miningLastAccrue');
+  if (!stored) { localStorage.setItem('miningLastAccrue', now); return; }
+
+  const hoursElapsed = (now - stored) / 3600000;
+  if (hoursElapsed < 0.0167) return;
+  const hoursToAccrue = Math.min(hoursElapsed, 24);
 
   let giftsEarned = 0, grinchEarned = 0;
+  MINERS_GIFTS.forEach(function(m) { giftsEarned += (myMiners[m.id]||0) * m.incomeDay * hoursToAccrue / 24; });
+  MINERS_GRINCH.forEach(function(m) { grinchEarned += (myMiners[m.id]||0) * m.incomeDay * hoursToAccrue / 24; });
 
-  MINERS_GIFTS.forEach(m => {
-    giftsEarned += (myMiners[m.id]||0) * m.incomeDay * hoursElapsed / 24;
-  });
-  MINERS_GRINCH.forEach(m => {
-    grinchEarned += (myMiners[m.id]||0) * m.incomeDay * hoursElapsed / 24;
-  });
-
-  giftsEarned  = Math.floor(giftsEarned);
+  giftsEarned = Math.floor(giftsEarned);
   grinchEarned = Math.floor(grinchEarned);
 
+  localStorage.setItem('miningLastAccrue', now);
+
   if (giftsEarned > 0 || grinchEarned > 0) {
-    // Накапливаем в pending
     S.miningPendingGifts  = (S.miningPendingGifts  || 0) + giftsEarned;
     S.miningPendingGrinch = (S.miningPendingGrinch || 0) + grinchEarned;
-    localStorage.setItem('miningLastAccrue', now);
-    save();
+    if (typeof save === 'function') save();
   }
 }
 
-// ── Забрать накопленное ───────────────────────────────
+// ── Таймер сбора ──────────────────────────────────────
+function updateMiningTimer() {
+  const el = document.getElementById('miningTimerDisplay');
+  if (!el) return;
+  const myMiners = (typeof S !== 'undefined' && S.miners) ? S.miners : {};
+  const hasMiners = Object.values(myMiners).some(v => v > 0);
+  if (!hasMiners) { el.textContent = 'Купи шахту чтобы начать майнинг!'; el.style.color = 'rgba(255,255,255,0.3)'; return; }
+
+  const lastAccrue = +localStorage.getItem('miningLastAccrue');
+  if (!lastAccrue) { el.textContent = ''; return; }
+
+  const elapsed = Date.now() - lastAccrue;
+  const interval = 3600000; // начисляем каждый час
+  const remaining = Math.max(0, interval - (elapsed % interval));
+
+  const h = Math.floor(elapsed / 3600000);
+  const mR = Math.floor((remaining % 3600000) / 60000);
+  const sR = Math.floor((remaining % 60000) / 1000);
+
+  const pendingG = S?.miningPendingGifts || 0;
+  const pendingGr = S?.miningPendingGrinch || 0;
+
+  if (pendingG > 0 || pendingGr > 0) {
+    el.textContent = 'Следующее начисление через: ' +
+      String(mR).padStart(2,'0') + ':' + String(sR).padStart(2,'0');
+    el.style.color = 'rgba(46,204,113,0.6)';
+  } else {
+    el.textContent = 'Следующее начисление через: ' +
+      String(mR).padStart(2,'0') + ':' + String(sR).padStart(2,'0');
+    el.style.color = 'rgba(255,255,255,0.4)';
+  }
+}
+
+// ── Забрать ───────────────────────────────────────────
 function claimMining() {
   accrueMiningIncome();
+  if (typeof S === 'undefined') return;
 
   const pendingGifts  = S.miningPendingGifts  || 0;
   const pendingGrinch = S.miningPendingGrinch || 0;
 
   if (pendingGifts === 0 && pendingGrinch === 0) {
-    toast('⏳ Пока нечего забирать!');
-    return;
+    toast('⏳ Пока нечего забирать!'); return;
   }
 
-  // Если есть реальные GRINCH — открываем модал вывода
   if (pendingGrinch > 0) {
-    document.getElementById('withdrawAmount').textContent = pendingGrinch.toLocaleString() + ' GRINCH';
-    if (S.wallet) document.getElementById('withdrawWallet').value = S.walletFull || '';
-    document.getElementById('withdrawModal').style.display = 'flex';
+    // GRINCH токены — модал вывода
+    const modal = document.getElementById('withdrawModal');
+    if (modal) {
+      document.getElementById('withdrawAmount').textContent = pendingGrinch.toLocaleString() + ' GRINCH';
+      if (S.wallet) document.getElementById('withdrawWallet').value = S.walletFull || '';
+      modal.style.display = 'flex';
+    }
+    // Подарки зачисляем сразу
+    if (pendingGifts > 0) {
+      S.gifts += pendingGifts; S.seasonBank += pendingGifts;
+      S.miningPendingGifts = 0;
+      if (typeof save === 'function') save();
+    }
     return;
   }
 
-  // Только подарки — сразу зачисляем
-  S.gifts += pendingGifts;
-  S.seasonBank += pendingGifts;
+  // Только подарки
+  S.gifts += pendingGifts; S.seasonBank += pendingGifts;
   S.miningPendingGifts = 0;
-  save();
-  toast('🎁 +' + pendingGifts.toLocaleString() + ' подарков от майнеров!');
-  updateMenu();
-  renderMiningList();
+  if (typeof save === 'function') save();
+  toast('🎁 +' + pendingGifts.toLocaleString() + ' подарков от шахт!');
+  if (typeof updateMenu === 'function') updateMenu();
+  updateMiningStats();
 }
 
-// ── Подать заявку на вывод ────────────────────────────
 function submitWithdraw() {
-  const wallet = document.getElementById('withdrawWallet').value.trim();
-  if (!wallet || wallet.length < 10) {
-    toast('❌ Введи правильный TON кошелёк!');
-    return;
-  }
-
-  const amount = S.miningPendingGrinch || 0;
-  const tgId   = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || S.nick;
-
-  // Уведомляем через бот
+  const wallet = document.getElementById('withdrawWallet')?.value?.trim();
+  if (!wallet || wallet.length < 10) { toast('❌ Введи правильный TON кошелёк!'); return; }
+  const amount = S?.miningPendingGrinch || 0;
+  const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || S?.nick || 'unknown';
   const BOT_TOKEN = '8536652053:AAF3WV2etPzjJHpMGl3YIlbrpkimEvi3TYs';
-  const msg = `💎 ЗАЯВКА НА ВЫВОД!\n\nПользователь: ${tgId}\nНик: ${S.nick}\nСумма: ${amount.toLocaleString()} GRINCH\nКошелёк: ${wallet}\n\nОтправь токены вручную!`;
-  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
+  const msg = '💎 ВЫВОД GRINCH!\n\nИгрок: ' + tgId + '\nСумма: ' + amount.toLocaleString() + ' GRINCH\nКошелёк: ' + wallet;
+  fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+    method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ chat_id: tgId, text: msg })
   }).catch(()=>{});
-
-  // Зачисляем подарки (если были)
-  if (S.miningPendingGifts > 0) {
-    S.gifts += S.miningPendingGifts;
-    S.seasonBank += S.miningPendingGifts;
-  }
-
-  S.miningPendingGrinch = 0;
-  S.miningPendingGifts  = 0;
-  save();
-
+  if (S?.miningPendingGifts > 0) { S.gifts += S.miningPendingGifts; S.seasonBank += S.miningPendingGifts; }
+  S.miningPendingGrinch = 0; S.miningPendingGifts = 0;
+  if (typeof save === 'function') save();
   closeWithdrawModal();
   toast('✅ Заявка отправлена! Выплата в течение 24ч');
-  updateMenu();
+  if (typeof updateMenu === 'function') updateMenu();
 }
 
 function closeWithdrawModal() {
-  document.getElementById('withdrawModal').style.display = 'none';
+  const m = document.getElementById('withdrawModal');
+  if (m) m.style.display = 'none';
 }
 
-// ── Инициализация при открытии экрана ────────────────
-const _origShow2 = typeof window._origShow !== 'undefined' ? window._origShow : null;
-document.addEventListener('DOMContentLoaded', () => {
-  // Запускаем накопление каждую минуту
-  setInterval(accrueMiningIncome, 60000);
-  // Первое накопление при загрузке
-  setTimeout(accrueMiningIncome, 2000);
-});
-
-// show('mining') уже обрабатывается в index.html
-// Здесь только экспортируем нужные функции глобально
-window.renderMiningList   = renderMiningList;
-window.fetchGrinchRate    = fetchGrinchRate;
-window.accrueMiningIncome = accrueMiningIncome;
-window.switchMiningTab    = switchMiningTab;
-window.buyMiner           = buyMiner;
-window.claimMining        = claimMining;
-window.submitWithdraw     = submitWithdraw;
-window.closeWithdrawModal = closeWithdrawModal;
+// ── Таймеры ───────────────────────────────────────────
+setInterval(function() { accrueMiningIncome(); updateMiningStats(); }, 60000);  // начисление раз в минуту
+setInterval(function() { updateMiningTimer(); }, 1000);  // таймер тикает каждую секунду
+document.addEventListener('DOMContentLoaded', function() { setTimeout(function() { accrueMiningIncome(); updateMiningTimer(); }, 1500); });

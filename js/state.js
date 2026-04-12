@@ -7,9 +7,10 @@ const S = {
   refs: +localStorage.getItem('refs')||0,
   refEarned: +localStorage.getItem('refEarned')||0,
   refTonEarned: +localStorage.getItem('refTonEarned')||0,
-  // Фикс null-кошелька: не берём если строка "null"
-  wallet: (localStorage.getItem('wallet') && localStorage.getItem('wallet') !== 'null') ? localStorage.getItem('wallet') : null,
-  walletFull: (localStorage.getItem('walletFull') && localStorage.getItem('walletFull') !== 'null') ? localStorage.getItem('walletFull') : null,
+  // Фикс null-кошелька: не берём если строка "null" или пустая
+  wallet:     (localStorage.getItem('wallet')     && localStorage.getItem('wallet')     !== 'null' && localStorage.getItem('wallet')     !== '') ? localStorage.getItem('wallet')     : null,
+  walletAddr: (localStorage.getItem('walletAddr') && localStorage.getItem('walletAddr') !== 'null' && localStorage.getItem('walletAddr') !== '') ? localStorage.getItem('walletAddr') : null,
+  walletFull: (localStorage.getItem('walletFull') && localStorage.getItem('walletFull') !== 'null' && localStorage.getItem('walletFull') !== '') ? localStorage.getItem('walletFull') : null,
   skin: localStorage.getItem('skin')||'default',
   inv: JSON.parse(localStorage.getItem('inv')||'{"slow":0,"autobet":0,"hp":0,"totem":0,"magnet":0,"star":0}'),
   questsDone: JSON.parse(localStorage.getItem('questsDone')||'[]'),
@@ -25,9 +26,11 @@ function save() {
     if(typeof S[k]==='object') localStorage.setItem(k,JSON.stringify(S[k]));
     else localStorage.setItem(k, S[k] === null ? '' : S[k]);
   });
-  // Чистим мусорный "null" из localStorage
-  if(localStorage.getItem('wallet')==='null') localStorage.removeItem('wallet');
-  if(localStorage.getItem('walletFull')==='null') localStorage.removeItem('walletFull');
+  // Чистим мусорный "null" и пустые строки из localStorage
+  ['wallet','walletAddr','walletFull'].forEach(k => {
+    const v = localStorage.getItem(k);
+    if(!v || v === 'null' || v === 'undefined') localStorage.removeItem(k);
+  });
 }
 
 function getTodayKey() {

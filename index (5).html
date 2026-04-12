@@ -1,0 +1,2041 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🎄 GRINCH GAME</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js" async></script>
+
+<style>
+@font-face {
+  font-family: 'Grinched';
+  src: url('assets/fonts/GrinchedRegular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+.load-title, .load-sub, .menu-logo, .menu-logo-sub,
+.goc-title, .ph-title, .btn-main-catch {
+  font-family: 'Grinched', cursive !important;
+  letter-spacing: 0.08em;
+}
+</style>
+
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/loading.css">
+  <link rel="stylesheet" href="css/menu.css">
+  <link rel="stylesheet" href="css/game.css">
+  <link rel="stylesheet" href="css/pvp.css">
+  <link rel="stylesheet" href="css/shop.css">
+  <link rel="stylesheet" href="css/ton.css">
+  <link rel="stylesheet" href="css/profile.css">
+  <link rel="stylesheet" href="css/components.css">
+<style>
+@keyframes trophyGlow{0%,100%{box-shadow:0 0 10px rgba(241,196,15,.4),0 0 20px rgba(241,196,15,.1);}50%{box-shadow:0 0 18px rgba(241,196,15,.7),0 0 35px rgba(241,196,15,.3);}}
+@keyframes btnPulse{0%,100%{box-shadow:0 8px 28px rgba(241,196,15,.45),0 2px 8px rgba(231,76,60,.3);}50%{box-shadow:0 10px 36px rgba(241,196,15,.7),0 4px 16px rgba(231,76,60,.5);}}
+@keyframes pvpGlow{0%,100%{box-shadow:0 0 14px rgba(46,204,113,.9),0 0 28px rgba(46,204,113,.5);border-color:#2ecc71;}50%{box-shadow:0 0 22px rgba(46,204,113,1),0 0 44px rgba(46,204,113,.7);border-color:#27ae60;}}
+</style>
+<script>
+function show(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  var el=document.getElementById('s-'+name);
+  if(!el){console.warn('screen not found: s-'+name);return;}
+  el.classList.add('active');
+  try{
+    if(name==='menu'&&typeof updateMenu==='function')updateMenu();
+    else if(name==='shop'&&typeof renderShop==='function')renderShop(0);
+    else if(name==='profile'&&typeof updateProfile==='function')updateProfile();
+    else if(name==='rating'&&typeof renderRating==='function')renderRating();
+    else if(name==='friends'&&typeof renderFriends==='function')renderFriends();
+    else if(name==='quests'&&typeof renderQuests==='function')renderQuests();
+    else if(name==='daily'&&typeof renderDaily==='function')renderDaily();
+    else if(name==='mining'){
+      if(typeof initMining==='function') initMining();
+      else {
+        if(typeof accrueMiningIncome==='function') accrueMiningIncome();
+        if(typeof renderMiningList==='function') renderMiningList();
+        if(typeof fetchGrinchRate==='function') setTimeout(fetchGrinchRate, 100);
+      }
+    }
+    else if(name==='settings'&&typeof updateSettingsUI==='function')updateSettingsUI();
+    else if(name==='wallet'&&typeof renderWalletScreen==='function')renderWalletScreen();
+    else if(name==='inventory'&&typeof renderInventoryScreen==='function')renderInventoryScreen();
+  }catch(e){console.error('show('+name+'):',e);}
+}
+function toast(msg,dur){
+  dur=dur||2200;var t=document.getElementById('toast');
+  if(!t)return;t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+function inviteFriend(){
+  var link='https://t.me/GrinchGameBot?start=ref_'+(window.S?S.nick:'player');
+  if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.openTelegramLink)
+    Telegram.WebApp.openTelegramLink('https://t.me/share/url?url='+encodeURIComponent(link));
+  else{navigator.clipboard&&navigator.clipboard.writeText(link);toast('📋 Ссылка скопирована!');}
+}
+// TX верификация
+let _txQuestId=null;
+function openTxModal(questId){
+  _txQuestId=questId;
+  document.getElementById('txHashInput').value='';
+  document.getElementById('txVerifyStatus').style.display='none';
+  document.getElementById('txVerifyModal').style.display='flex';
+}
+function closeTxModal2(){document.getElementById('txVerifyModal').style.display='none';}
+function submitTxVerify(){
+  const txid=document.getElementById('txHashInput').value.trim();
+  const status=document.getElementById('txVerifyStatus');
+  if(txid.length<20){
+    status.style.cssText='display:block;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.3);color:#e74c3c;border-radius:10px;padding:10px;font-size:12px;text-align:center;';
+    status.textContent='❌ Введи корректный хэш транзакции';return;
+  }
+  const used=JSON.parse(localStorage.getItem('usedTxids')||'[]');
+  if(used.includes(txid)){
+    status.style.cssText='display:block;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.3);color:#e74c3c;border-radius:10px;padding:10px;font-size:12px;text-align:center;';
+    status.textContent='❌ Этот хэш уже использован!';return;
+  }
+  status.style.cssText='display:block;background:rgba(241,196,15,.1);border:1px solid rgba(241,196,15,.2);color:#f1c40f;border-radius:10px;padding:10px;font-size:12px;text-align:center;';
+  status.textContent='⏳ Проверяем транзакцию...';
+  setTimeout(()=>{
+    used.push(txid);localStorage.setItem('usedTxids',JSON.stringify(used));
+    claimBuyQuest(_txQuestId);
+    status.style.cssText='display:block;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);color:#2ecc71;border-radius:10px;padding:10px;font-size:12px;text-align:center;';
+    status.textContent='✅ Транзакция подтверждена!';
+    setTimeout(()=>closeTxModal2(),1500);
+  },2000);
+}
+</script>
+<style>
+.screen { align-items: stretch !important; }
+.menu-topbar { padding: max(12px,env(safe-area-inset-top)) 12px 0 0 !important; justify-content: unset !important; }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ====== LOADING ====== -->
+<div id="s-load" class="screen active">
+  <div class="load-wrap">
+    <img src="assets/img/image_1.png" style="width:140px;height:140px;object-fit:contain;filter:drop-shadow(0 0 22px rgba(46,204,113,.6));animation:loadFloat 2s ease-in-out infinite;"/>
+    <div class="load-title">GRINCH</div>
+    <div class="load-sub">GAME</div>
+    <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
+    <div class="load-status" id="loadStatus">ИНИЦИАЛИЗАЦИЯ...</div>
+  </div>
+</div>
+
+<!-- ====== MENU ====== -->
+<div id="s-menu" class="screen" style="position:relative;overflow:hidden;">
+
+  <!-- Фон — рождественский лес -->
+  <div style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;">
+    <img src="assets/img/image_233.jpg" style="width:100%;height:100%;object-fit:cover;opacity:0.7;">
+    <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,rgba(5,20,10,0.55) 0%,rgba(5,20,10,0.2) 40%,rgba(5,20,10,0.75) 80%,rgba(5,20,10,0.97) 100%);"></div>
+  </div>
+
+  <!-- Контент поверх фона -->
+  <div style="position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;align-items:stretch;overflow:hidden;">
+
+    <!-- ТОПБАР -->
+    <div class="menu-topbar" style="flex-shrink:0;">
+      <!-- Строка 1: аватар + ник + кубок + шестерёнка -->
+      <div class="topbar-row1">
+        <div class="topbar-user">
+          <div class="topbar-avatar">
+            <img src="assets/img/image_10.png" onerror="this.style.display='none';this.parentNode.innerHTML='<span id=menuAvatar style=font-size:20px;font-weight:800;color:#2ecc71>И</span>'">
+          </div>
+          <div class="topbar-nick-block">
+            <div class="topbar-nick" id="menuNick">Игрок</div>
+            <div class="topbar-level" id="menuLevel">★ Уровень 1</div>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <!-- Кубок ТОП -->
+          <div class="topbar-trophy" onclick="show('rating')">
+            <span class="topbar-trophy-icon">🏆</span>
+            <div class="topbar-trophy-info">
+              <span class="topbar-trophy-label">ТОП</span>
+              <span class="topbar-trophy-rank" id="menuRank">#—</span>
+            </div>
+          </div>
+          <!-- Шестерёнка -->
+          <div class="topbar-settings" onclick="show('profile')">⚙️</div>
+        </div>
+      </div>
+
+      <!-- Прогресс-бар уровня -->
+      <div class="topbar-lvl-bar-wrap">
+        <div class="topbar-lvl-bar-bg">
+          <div class="topbar-lvl-bar-fill" id="menuLevelBar"></div>
+        </div>
+        <div class="topbar-lvl-labels">
+          <span id="menuLevelLabel">До уровня 2</span>
+          <span id="menuLevelPct">0%</span>
+        </div>
+      </div>
+
+      <!-- Строка 2: валютные карточки -->
+      <div class="topbar-stats">
+        <!-- Подарки -->
+        <div class="topbar-stat-card gifts">
+          <div class="topbar-stat-inner">
+            <img class="topbar-stat-icon" src="assets/img/image_2.jpg" onerror="this.outerHTML='<span style=font-size:16px>🎁</span>'">
+            <div class="topbar-stat-txt">
+              <span class="topbar-stat-label">ПОДАРКИ</span>
+              <span class="topbar-stat-val gold" id="menuGifts">0</span>
+            </div>
+          </div>
+          <div class="topbar-stat-plus gold" onclick="show('shop')">+</div>
+        </div>
+        <!-- GRINCH -->
+        <div class="topbar-stat-card grinch">
+          <div class="topbar-stat-inner">
+            <img class="topbar-stat-icon" src="assets/img/image_3.jpg" onerror="this.outerHTML='<span style=font-size:16px>🟢</span>'">
+            <div class="topbar-stat-txt">
+              <span class="topbar-stat-label">GRINCH</span>
+              <span class="topbar-stat-val green" id="menuGrinch">0</span>
+            </div>
+          </div>
+          <div class="topbar-stat-plus green" onclick="show('shop')">+</div>
+        </div>
+        <!-- Энергия -->
+        <div class="topbar-stat-card energy" onclick="openEnergyModal()">
+          <div style="flex:1;">
+            <div class="energy-icon-label">⚡ ЭНЕРГИЯ</div>
+            <div class="energy-val" id="menuEnergy">5/5</div>
+            <div class="energy-dots">
+              <div class="energy-dot filled"></div>
+              <div class="energy-dot filled"></div>
+              <div class="energy-dot filled"></div>
+              <div class="energy-dot filled"></div>
+              <div class="energy-dot filled"></div>
+            </div>
+          </div>
+          <div class="topbar-stat-plus blue">+</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ЦЕНТР: Гринч + название -->
+    <div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 16px;overflow:hidden;">
+      <img src="assets/img/image_4.png" style="width:150px;height:150px;object-fit:contain;filter:drop-shadow(0 0 30px rgba(46,204,113,0.8));animation:menuFloat 4s ease-in-out infinite;flex-shrink:0;">
+      <div style="font-size:40px;font-weight:900;letter-spacing:4px;background:linear-gradient(135deg,#2ecc71,#f1c40f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;text-shadow:none;margin-top:-6px;flex-shrink:0;">GRINCH</div>
+      <div style="font-size:10px;letter-spacing:6px;color:rgba(255,255,255,0.5);margin-bottom:6px;flex-shrink:0;">CATCH THE GIFTS</div>
+
+      <!-- Банк сезона -->
+      <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(241,196,15,0.25);border-radius:14px;padding:6px 20px;text-align:center;width:100%;max-width:300px;margin-bottom:8px;flex-shrink:0;">
+        <div style="font-size:9px;letter-spacing:2px;color:rgba(241,196,15,0.6);font-weight:700;">🎄 БАНК СЕЗОНА</div>
+        <div style="font-size:24px;font-weight:900;color:#f1c40f;" id="menuSeasonBank">0</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.3);">подарков собрано всеми игроками</div>
+      </div>
+
+      <!-- Кнопка ЛОВИТЬ ПОДАРКИ -->
+      <button class="btn-main-catch" onclick="startGameWithEnergy()" style="flex-shrink:0;">🎁 ЛОВИТЬ ПОДАРКИ</button>
+    </div>
+
+    <!-- БЛОКИ ВНИЗУ: ежедневка, майнинг, события, магазин -->
+    <div style="display:grid;grid-template-columns:1.1fr 1.3fr 1.1fr 0.7fr;gap:5px;padding:3px 8px 4px;flex-shrink:0;height:82px;">
+
+      <!-- Ежедневные награды -->
+      <div onclick="show('daily')" style="position:relative;border:2px solid rgba(46,204,113,0.6);border-radius:12px;cursor:pointer;overflow:hidden;-webkit-tap-highlight-color:transparent;box-shadow:0 0 10px rgba(46,204,113,0.3);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+        <div style="position:absolute;inset:0;background:linear-gradient(160deg,#0d2a10,#071a08);"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-bottom:20px;font-size:30px;">🎁</div>
+        <div style="position:relative;z-index:2;width:100%;background:rgba(0,0,0,0.7);padding:3px 2px;text-align:center;">
+          <div style="font-size:5.5px;font-weight:800;color:#fff;letter-spacing:.3px;text-transform:uppercase;line-height:1.3;">ЕЖЕДНЕВНЫЕ<br>НАГРАДЫ</div>
+          <div style="font-size:7.5px;font-weight:800;color:#2ecc71;" id="dailyTimer">Забрать!</div>
+        </div>
+      </div>
+
+      <!-- Майнинг — широкая -->
+      <div onclick="show('mining')" style="position:relative;border:none;border-radius:12px;cursor:pointer;overflow:hidden;-webkit-tap-highlight-color:transparent;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+        <img src="assets/img/image_456.png" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;">
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 55%);border-radius:10px;"></div>
+        <div style="position:relative;z-index:2;width:100%;padding:3px 2px;text-align:center;">
+          <div style="font-size:7px;font-weight:800;color:#fff;letter-spacing:.5px;text-transform:uppercase;">МАЙНИНГ</div>
+          <div style="font-size:8px;font-weight:800;color:#ff69b4;" id="miningIncomePreview">0/час</div>
+        </div>
+      </div>
+
+      <!-- События — средняя -->
+      <div onclick="show('quests')" style="position:relative;border:2px solid rgba(52,152,219,0.6);border-radius:12px;cursor:pointer;overflow:hidden;-webkit-tap-highlight-color:transparent;box-shadow:0 0 10px rgba(52,152,219,0.3);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+        <div style="position:absolute;inset:0;background:linear-gradient(160deg,#080d1f,#050810);"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-bottom:20px;font-size:32px;">❄️</div>
+        <div style="position:relative;z-index:2;width:100%;background:rgba(0,0,0,0.7);padding:3px 2px;text-align:center;">
+          <div style="font-size:6px;font-weight:800;color:#fff;letter-spacing:.5px;text-transform:uppercase;">СОБЫТИЯ</div>
+          <div style="font-size:8px;font-weight:800;color:#3498db;" id="eventTimer">7д 0ч</div>
+        </div>
+      </div>
+
+      <!-- Магазин — узкая -->
+      <div onclick="show('shop')" style="position:relative;border:2px solid rgba(230,126,34,0.6);border-radius:12px;cursor:pointer;overflow:hidden;-webkit-tap-highlight-color:transparent;box-shadow:0 0 10px rgba(230,126,34,0.3);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+        <div style="position:absolute;inset:0;background:linear-gradient(160deg,#1a0d05,#0f0802);"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-bottom:20px;font-size:28px;">🪙</div>
+        <div style="position:relative;z-index:2;width:100%;background:rgba(0,0,0,0.7);padding:3px 2px;text-align:center;">
+          <div style="font-size:5.5px;font-weight:800;color:#fff;letter-spacing:.3px;text-transform:uppercase;">МАГАЗИН</div>
+          <div style="font-size:7.5px;font-weight:800;color:#e67e22;">Открыть</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NAV BAR -->
+    <nav style="width:100%;background:rgba(3,7,6,0.97);border-top:2px solid rgba(46,204,113,0.3);padding-bottom:max(6px,env(safe-area-inset-bottom));flex-shrink:0;">
+      <div style="display:flex;align-items:flex-end;justify-content:space-around;padding:4px 0px 2px;position:relative;">
+
+        <!-- Друзья -->
+        <div onclick="show('friends')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 6px;cursor:pointer;-webkit-tap-highlight-color:transparent;background:rgba(255,255,255,0.04);clip-path:polygon(6% 0%,94% 0%,100% 100%,0% 100%);">
+          <div style="width:48px;height:48px;">
+            <img src="assets/img/Image_3996.png" style="width:100%;height:100%;object-fit:contain;">
+          </div>
+          <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:700;letter-spacing:.3px;">ДРУЗЬЯ</span>
+        </div>
+
+        <!-- Задания -->
+        <div onclick="show('quests')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 6px;cursor:pointer;-webkit-tap-highlight-color:transparent;background:rgba(255,255,255,0.04);clip-path:polygon(6% 0%,94% 0%,100% 100%,0% 100%);">
+          <div style="width:48px;height:48px;">
+            <img src="assets/img/Image_3998.png" style="width:100%;height:100%;object-fit:contain;">
+          </div>
+          <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:700;letter-spacing:.3px;">ЗАДАНИЯ</span>
+        </div>
+
+        <!-- PVP — центральная большая кнопка -->
+        <div onclick="show('pvp')" style="flex:1;display:flex;flex-direction:column;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;">
+          <div style="margin-top:-32px;">
+            <img src="assets/img/Image_208.png" style="width:96px;height:96px;object-fit:contain;display:block;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 0 18px rgba(241,196,15,0.7));">
+          </div>
+        </div>
+
+        <!-- Профиль -->
+        <div onclick="show('profile')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 6px;cursor:pointer;-webkit-tap-highlight-color:transparent;background:rgba(255,255,255,0.04);clip-path:polygon(6% 0%,94% 0%,100% 100%,0% 100%);">
+          <div style="width:48px;height:48px;">
+            <img src="assets/img/Image_3999.png" style="width:100%;height:100%;object-fit:contain;">
+          </div>
+          <span style="font-size:9px;color:rgba(255,255,255,0.7);font-weight:700;letter-spacing:.3px;">ПРОФИЛЬ</span>
+        </div>
+
+        <!-- Магазин -->
+        <div onclick="show('shop')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 6px;cursor:pointer;-webkit-tap-highlight-color:transparent;background:rgba(241,196,15,0.07);clip-path:polygon(6% 0%,94% 0%,100% 100%,0% 100%);">
+          <div style="width:54px;height:54px;filter:drop-shadow(0 0 10px rgba(241,196,15,0.9));">
+            <img src="assets/img/Image_3997.png" style="width:100%;height:100%;object-fit:contain;">
+          </div>
+          <span style="font-size:9px;color:#f1c40f;font-weight:700;letter-spacing:.3px;">МАГАЗИН</span>
+        </div>
+
+      </div>
+    </nav>
+
+  </div>
+</div>
+
+<!-- ====== GAME ====== -->
+<!-- ====== DAILY CHECKIN ====== -->
+<div id="s-game" class="screen" style="position:relative;">
+  <div style="width:100%;background:rgba(3,7,6,.97);border-bottom:1px solid rgba(46,204,113,.15);padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;padding-top:max(10px,env(safe-area-inset-top));">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <div style="font-size:9px;color:rgba(255,255,255,.35);letter-spacing:2px;">ПОДАРКИ</div>
+      <div style="display:flex;align-items:center;gap:7px;">
+        <span style="font-size:22px;">🎁</span>
+        <span id="gScore" style="font-size:32px;font-weight:900;color:#f1c40f;line-height:1;text-shadow:0 0 14px rgba(241,196,15,.5);">0</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:3px;align-items:center;" id="gHp"></div>
+    
+  </div>
+
+  <canvas id="gameCanvas" style="flex:1;"></canvas>
+
+  <!-- Bottom boost bar - always visible -->
+  <div id="boostBar" style="width:100%;background:rgba(3,7,6,0.55);backdrop-filter:blur(14px);border-top:1px solid rgba(46,204,113,0.15);display:flex;align-items:center;justify-content:space-around;padding:6px 8px;flex-shrink:0;padding-bottom:max(8px,env(safe-area-inset-bottom));">
+    <!-- slow -->
+    <div onclick="useItem('slow')" id="bb-slow" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:12px;cursor:pointer;background:rgba(52,152,219,.12);border:1px solid rgba(52,152,219,.25);min-width:52px;transition:all .15s;">
+      <span style="font-size:22px;line-height:1;">⏱️</span>
+      <span style="font-size:9px;color:rgba(255,255,255,.6);">Замедл.</span>
+      <span id="bp-slow" style="font-size:11px;font-weight:800;color:rgba(52,152,219,1);">×0</span>
+    </div>
+    <!-- magnet -->
+    <div onclick="useItem('magnet')" id="bb-magnet" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:12px;cursor:pointer;background:rgba(142,68,173,.12);border:1px solid rgba(142,68,173,.25);min-width:52px;transition:all .15s;">
+      <span style="font-size:22px;line-height:1;">🌙</span>
+      <span style="font-size:9px;color:rgba(255,255,255,.6);">Магнит</span>
+      <span id="bp-magnet" style="font-size:11px;font-weight:800;color:rgba(142,68,173,1);">×0</span>
+    </div>
+    <!-- totem -->
+    <div onclick="useItem('totem')" id="bb-totem" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:12px;cursor:pointer;background:rgba(155,89,182,.12);border:1px solid rgba(155,89,182,.25);min-width:52px;transition:all .15s;">
+      <span style="font-size:22px;line-height:1;">🗿</span>
+      <span style="font-size:9px;color:rgba(255,255,255,.6);">Тотем</span>
+      <span id="bp-totem" style="font-size:11px;font-weight:800;color:rgba(155,89,182,1);">×0</span>
+    </div>
+    <!-- star -->
+    <div onclick="useItem('star')" id="bb-star" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:12px;cursor:pointer;background:rgba(241,196,15,.12);border:1px solid rgba(241,196,15,.25);min-width:52px;transition:all .15s;">
+      <span style="font-size:22px;line-height:1;">⭐</span>
+      <span style="font-size:9px;color:rgba(255,255,255,.6);">x2 хруст</span>
+      <span id="bp-star" style="font-size:11px;font-weight:800;color:rgba(241,196,15,1);">×0</span>
+    </div>
+    <!-- hp -->
+    <div onclick="useItem('hp')" id="bb-hp" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:12px;cursor:pointer;background:rgba(231,76,60,.12);border:1px solid rgba(231,76,60,.25);min-width:52px;transition:all .15s;">
+      <span style="font-size:22px;line-height:1;">❤️</span>
+      <span style="font-size:9px;color:rgba(255,255,255,.6);">+1 HP</span>
+      <span id="bp-hp" style="font-size:11px;font-weight:800;color:rgba(231,76,60,1);">×0</span>
+    </div>
+  </div>
+  <!-- Game Over -->
+  <div class="game-over-overlay" id="gOverlay">
+    <div style="background:linear-gradient(135deg,#0d2a1a,#0a1f12);border:1px solid rgba(46,204,113,0.3);border-radius:24px;padding:28px 24px;min-width:280px;max-width:320px;width:90%;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;">
+      <div style="font-size:72px;line-height:1;">😈</div>
+      <div style="font-size:26px;font-weight:900;color:#fff;letter-spacing:.05em;">РАУНД ОКОНЧЕН</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.5);">Собрано подарков</div>
+      <div style="font-size:56px;font-weight:900;color:#f1c40f;line-height:1;text-shadow:0 0 20px rgba(241,196,15,.5);" id="gOverScore">0</div>
+      <button onclick="startGameWithEnergy()" style="width:100%;padding:15px;background:linear-gradient(135deg,#e67e22,#f39c12);border:none;border-radius:16px;font-size:16px;font-weight:900;color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(230,126,34,.4);letter-spacing:.05em;">🎁 ИГРАТЬ СНОВА</button>
+      <button onclick="show('menu');stopGame()" style="width:100%;padding:13px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:16px;font-size:14px;font-weight:700;color:rgba(255,255,255,.7);cursor:pointer;">← ГЛАВНОЕ МЕНЮ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== PVP ====== -->
+<div id="s-pvp" class="screen">
+  <div class="page-header">
+    <div class="ph-back" onclick="show('menu')">◀</div>
+    <div class="ph-title">⚔️ PVP АРЕНА</div>
+    <div class="ph-right"></div>
+  </div>
+  <div class="pvp-online-bar">
+    <div class="pvp-online-dot"></div>
+    <div class="pvp-online-text">Онлайн сейчас:</div>
+    <div class="pvp-online-count">1,247 игроков</div>
+  </div>
+  <div class="pvp-content">
+    <div class="pvp-section-title">🎮 Одиночные режимы</div>
+    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
+      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#e74c3c22,#c0392b22);">🎁</div>
+      <div class="pvp-game-info">
+        <div class="pvp-game-name">Битва за подарки</div>
+        <div class="pvp-game-desc">1 на 1. Кто поймает больше подарков за 60 сек — забирает ставку!</div>
+        <div style="margin-top:6px;"><span class="pvp-game-badge badge-pvp">1v1</span></div>
+      </div>
+    </div>
+    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
+      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#3498db22,#2980b922);">❄️</div>
+      <div class="pvp-game-info">
+        <div class="pvp-game-name">Снежная битва</div>
+        <div class="pvp-game-desc">Уворачивайся от снежков соперника и лови подарки одновременно!</div>
+        <div style="margin-top:6px;"><span class="pvp-game-badge badge-pvp">1v1</span></div>
+      </div>
+    </div>
+    <div class="pvp-section-title">👥 Командные режимы</div>
+    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
+      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#2ecc7122,#27ae6022);">🏆</div>
+      <div class="pvp-game-info">
+        <div class="pvp-game-name">Командная охота</div>
+        <div class="pvp-game-desc">3v3. Команда против команды. Победители делят банк подарков!</div>
+        <div style="margin-top:6px;"><span class="pvp-game-badge badge-team">3v3</span></div>
+      </div>
+    </div>
+    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
+      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#f1c40f22,#e67e2222);">🎄</div>
+      <div class="pvp-game-info">
+        <div class="pvp-game-name">Новогодний турнир</div>
+        <div class="pvp-game-desc">5v5. Специальные события раз в неделю с призами в токенах GRINCH!</div>
+        <div style="margin-top:6px;"><span class="pvp-game-badge badge-team">5v5</span> <span class="pvp-game-badge badge-soon" style="margin-left:4px;">СКОРО</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SHOP ====== -->
+<div id="s-shop" class="screen" style="position:relative;overflow:hidden;">
+
+  <!-- Фон магазина -->
+  <div style="position:absolute;inset:0;z-index:0;">
+    <img src="assets/img/Image_218.jpg" style="width:100%;height:100%;object-fit:cover;opacity:0.9;">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.25) 30%,rgba(0,0,0,0.45) 70%,rgba(0,0,0,0.8) 100%);"></div>
+  </div>
+
+  <!-- Контент поверх фона -->
+  <div style="position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;">
+
+    <!-- Шапка -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:max(12px,env(safe-area-inset-top)) 16px 8px;flex-shrink:0;">
+      <div onclick="show('menu')" style="width:36px;height:36px;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;">◀</div>
+      <div style="font-size:22px;font-weight:900;color:#f1c40f;text-shadow:0 2px 8px rgba(0,0,0,0.8),0 0 20px rgba(241,196,15,0.4);letter-spacing:2px;">🛒 МАГАЗИН</div>
+      <div style="width:36px;"></div>
+    </div>
+
+    <!-- Баланс -->
+    <div style="display:flex;gap:8px;padding:0 12px 8px;flex-shrink:0;">
+      <div style="flex:1;background:rgba(0,0,0,0.55);border:1px solid rgba(241,196,15,0.4);border-radius:12px;padding:7px 12px;display:flex;align-items:center;gap:6px;">
+        <img src="assets/img/image_5.jpg" style="width:22px;height:22px;object-fit:cover;border-radius:5px;flex-shrink:0;">
+        <span style="font-size:11px;color:rgba(255,255,255,0.6);">Подарки</span>
+        <span style="font-size:15px;font-weight:900;color:#f1c40f;margin-left:auto;" id="shopGifts">0</span>
+      </div>
+      <div style="flex:1;background:rgba(0,0,0,0.55);border:1px solid rgba(46,204,113,0.4);border-radius:12px;padding:7px 12px;display:flex;align-items:center;gap:6px;">
+        <img src="assets/img/image_6.jpg" style="width:22px;height:22px;object-fit:cover;border-radius:5px;flex-shrink:0;">
+        <span style="font-size:11px;color:rgba(255,255,255,0.6);">GRINCH</span>
+        <span style="font-size:15px;font-weight:900;color:#2ecc71;margin-left:auto;" id="shopGrinch">0</span>
+      </div>
+    </div>
+
+    <!-- Табы -->
+    <div style="display:flex;margin:0 12px 10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:3px;flex-shrink:0;">
+      <div class="stab active" onclick="shopTab(0,this)" style="flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:800;border-radius:11px;cursor:pointer;transition:all .2s;">БУСТЫ</div>
+      <div class="stab" onclick="shopTab(1,this)" style="flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:800;border-radius:11px;cursor:pointer;transition:all .2s;">СКИНЫ</div>
+      <div class="stab" onclick="shopTab(2,this)" style="flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:800;border-radius:11px;cursor:pointer;transition:all .2s;">💎 TON</div>
+    </div>
+
+    <!-- Список товаров -->
+    <div class="shop-list" id="shopList" style="flex:1;overflow-y:auto;padding:0 12px 16px;"></div>
+
+  </div>
+</div>
+
+<!-- ====== PROFILE STYLES ====== -->
+<style>
+/* ── PROFILE SCREEN ── */
+#s-profile {
+  position: relative;
+  overflow: hidden;
+}
+#s-profile .prof-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+}
+#s-profile .prof-bg img {
+  width: 100%; height: 100%; object-fit: cover; opacity: 0.85;
+}
+#s-profile .prof-bg-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,8,2,0.6) 0%, rgba(0,5,1,0.25) 35%, rgba(0,5,1,0.7) 75%, rgba(0,3,0,0.97) 100%);
+}
+#s-profile .prof-content {
+  position: relative; z-index: 1;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  padding: max(10px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+  gap: 10px; box-sizing: border-box;
+}
+
+/* ── BACK BUTTON ── */
+.prof-back {
+  width: 34px; height: 34px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: #fff; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0; align-self: flex-start;
+}
+
+/* ── HERO CARD ── */
+.prof-hero {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(241,196,15,0.25);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex; align-items: center; gap: 14px;
+  backdrop-filter: blur(8px);
+}
+.prof-avatar-ring {
+  width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg,#f1c40f,#2ecc71,#f1c40f);
+  padding: 2.5px; box-shadow: 0 0 20px rgba(241,196,15,0.5);
+}
+.prof-avatar-inner {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: #0a1a0a;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.prof-avatar-inner img { width: 100%; height: 100%; object-fit: contain; }
+.prof-hero-right { flex: 1; min-width: 0; }
+.prof-nick {
+  font-size: 20px; font-weight: 900; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+}
+.prof-id { font-size: 11px; color: rgba(255,255,255,0.4); margin: 2px 0 8px; }
+.prof-lvl-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: linear-gradient(135deg, rgba(241,196,15,0.2), rgba(230,126,34,0.15));
+  border: 1px solid rgba(241,196,15,0.45);
+  border-radius: 8px; padding: 4px 10px;
+  font-size: 12px; font-weight: 800; color: #f1c40f;
+  box-shadow: 0 0 12px rgba(241,196,15,0.2);
+}
+
+/* ── LEVEL PROGRESS ── */
+.prof-lvl-bar-wrap {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(46,204,113,0.15);
+  border-radius: 14px; padding: 12px 14px;
+  backdrop-filter: blur(6px);
+}
+.prof-lvl-bar-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+  font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.45);
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.prof-lvl-bar-head span { color: #2ecc71; font-size: 11px; }
+.prof-bar-bg {
+  height: 9px; background: rgba(255,255,255,0.08);
+  border-radius: 5px; overflow: hidden; margin-bottom: 5px;
+}
+.prof-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2ecc71, #f1c40f);
+  border-radius: 5px;
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 0 8px rgba(46,204,113,0.5);
+}
+.prof-bar-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: rgba(255,255,255,0.3);
+}
+
+/* ── TOP SEASON BANNER ── */
+.prof-season-banner {
+  background: linear-gradient(135deg, rgba(241,196,15,0.12), rgba(230,126,34,0.08));
+  border: 1px solid rgba(241,196,15,0.3);
+  border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  backdrop-filter: blur(6px);
+}
+.prof-season-banner .psb-icon { font-size: 30px; flex-shrink: 0; }
+.prof-season-banner .psb-info { flex: 1; }
+.prof-season-banner .psb-title { font-size: 13px; font-weight: 900; color: #fff; margin-bottom: 3px; }
+.prof-season-banner .psb-title span { color: #f1c40f; }
+.prof-season-banner .psb-sub { font-size: 11px; color: rgba(255,255,255,0.45); line-height: 1.4; }
+.prof-season-banner .psb-rank {
+  background: rgba(241,196,15,0.18);
+  border: 1px solid rgba(241,196,15,0.35);
+  border-radius: 10px; padding: 6px 12px;
+  font-size: 13px; font-weight: 900; color: #f1c40f; flex-shrink: 0;
+  text-align: center; line-height: 1.2;
+}
+.prof-season-banner .psb-rank-lbl { font-size: 8px; color: rgba(241,196,15,0.6); font-weight: 700; letter-spacing: 1px; }
+
+/* ── STATS ROW ── */
+.prof-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.prof-stat {
+  background: rgba(0,0,0,0.5);
+  border-radius: 14px; padding: 12px 8px;
+  text-align: center; backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.prof-stat-icon { font-size: 20px; margin-bottom: 4px; }
+.prof-stat-val { font-size: 20px; font-weight: 900; line-height: 1; }
+.prof-stat-lbl { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; color: rgba(255,255,255,0.4); margin-top: 3px; text-transform: uppercase; }
+.prof-stat.gifts .prof-stat-val { color: #f1c40f; }
+.prof-stat.grinch .prof-stat-val { color: #2ecc71; }
+.prof-stat.refs .prof-stat-val { color: #3498db; }
+
+/* ── ACTION BUTTONS ── */
+.prof-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prof-action-btn {
+  border-radius: 18px; overflow: hidden; position: relative;
+  min-height: 80px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+  transition: transform .15s;
+}
+.prof-action-btn:active { transform: scale(0.96); }
+.prof-action-btn.wallet { border-color: rgba(41,182,246,0.4); box-shadow: 0 4px 20px rgba(41,182,246,0.15); }
+.prof-action-btn.inventory { border-color: rgba(46,204,113,0.4); box-shadow: 0 4px 20px rgba(46,204,113,0.15); }
+.prof-action-btn .pab-icon { font-size: 30px; }
+.prof-action-btn .pab-label { font-size: 13px; font-weight: 900; color: #fff; letter-spacing: 0.5px; }
+.prof-action-btn.wallet .pab-label { color: #29b6f6; }
+.prof-action-btn.inventory .pab-label { color: #2ecc71; }
+.prof-action-btn .pab-sub { font-size: 9px; color: rgba(255,255,255,0.35); letter-spacing: 0.3px; }
+
+/* ── HISTORY ── */
+.prof-history-wrap {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px; overflow: hidden;
+  backdrop-filter: blur(6px);
+}
+.prof-history-title {
+  font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.4);
+  letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ═══════════════════════════════════════
+   WALLET SCREEN
+═══════════════════════════════════════ */
+#s-wallet {
+  position: relative; overflow: hidden;
+}
+#s-wallet .wlt-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse at 50% 0%, #001a2e 0%, #000a14 60%);
+}
+#s-wallet .wlt-content {
+  position: relative; z-index: 1;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  padding: max(10px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+  gap: 12px; box-sizing: border-box;
+}
+.wlt-header {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.wlt-header-title { font-size: 18px; font-weight: 900; color: #fff; flex: 1; text-align: center; }
+.wlt-card {
+  background: linear-gradient(135deg, rgba(41,182,246,0.12), rgba(0,136,204,0.08));
+  border: 1px solid rgba(41,182,246,0.3);
+  border-radius: 20px; padding: 20px;
+  backdrop-filter: blur(8px);
+}
+.wlt-card-label { font-size: 11px; font-weight: 700; color: rgba(41,182,246,0.7); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+.wlt-card-addr { font-size: 13px; font-weight: 700; color: #29b6f6; word-break: break-all; line-height: 1.5; }
+.wlt-card-addr.empty { color: rgba(255,255,255,0.3); font-size: 12px; font-style: italic; }
+.wlt-balances { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wlt-bal {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px; padding: 14px 12px; text-align: center;
+}
+.wlt-bal-icon { font-size: 24px; margin-bottom: 4px; }
+.wlt-bal-val { font-size: 22px; font-weight: 900; color: #fff; }
+.wlt-bal-lbl { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+.wlt-connect-btn {
+  width: 100%; padding: 16px;
+  background: linear-gradient(135deg, #0088cc, #006699);
+  border: none; border-radius: 16px;
+  font-size: 15px; font-weight: 900; color: #fff;
+  cursor: pointer; letter-spacing: 1px;
+  box-shadow: 0 6px 24px rgba(0,136,204,0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+.wlt-disc-btn {
+  width: 100%; padding: 12px;
+  background: rgba(231,76,60,0.15);
+  border: 1px solid rgba(231,76,60,0.3);
+  border-radius: 12px;
+  font-size: 13px; font-weight: 800; color: #e74c3c;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.wlt-tx-title {
+  font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.4);
+  letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;
+}
+.wlt-tx-list {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px; overflow: hidden;
+}
+.wlt-tx-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.wlt-tx-row:last-child { border-bottom: none; }
+.wlt-tx-icon { font-size: 20px; flex-shrink: 0; }
+.wlt-tx-info { flex: 1; }
+.wlt-tx-name { font-size: 13px; font-weight: 700; color: #fff; }
+.wlt-tx-date { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+.wlt-tx-amt { font-size: 14px; font-weight: 900; }
+.wlt-tx-amt.plus { color: #2ecc71; }
+.wlt-tx-amt.minus { color: #e74c3c; }
+.wlt-empty { text-align: center; padding: 28px 16px; color: rgba(255,255,255,0.25); font-size: 12px; }
+
+/* ═══════════════════════════════════════
+   INVENTORY SCREEN
+═══════════════════════════════════════ */
+#s-inventory {
+  position: relative; overflow: hidden;
+}
+#s-inventory .inv-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+}
+#s-inventory .inv-bg img {
+  width: 100%; height: 100%; object-fit: cover; opacity: 0.55;
+}
+#s-inventory .inv-bg-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,20,8,0.45) 0%, rgba(0,15,5,0.15) 30%, rgba(0,10,3,0.5) 80%, rgba(0,5,2,0.75) 100%);
+}
+#s-inventory .inv-content {
+  position: relative; z-index: 1;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  padding: max(10px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+  gap: 10px; box-sizing: border-box; overflow: hidden;
+}
+.inv-header {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.inv-header-title {
+  font-family: 'Grinched', cursive;
+  font-size: 22px; letter-spacing: 3px; color: #f1c40f;
+  flex: 1; text-align: center;
+  text-shadow: 0 0 16px rgba(241,196,15,0.7);
+}
+.inv-grid {
+  flex: 1; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; align-content: start;
+}
+.inv-item {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px; padding: 14px 8px 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform .15s;
+  backdrop-filter: blur(6px);
+}
+.inv-item:active { transform: scale(0.95); }
+.inv-item.slow   { border-color: rgba(52,152,219,0.4); }
+.inv-item.magnet { border-color: rgba(142,68,173,0.4); }
+.inv-item.totem  { border-color: rgba(155,89,182,0.4); }
+.inv-item.star   { border-color: rgba(241,196,15,0.4); }
+.inv-item.hp     { border-color: rgba(231,76,60,0.4); }
+.inv-item.autobet{ border-color: rgba(230,126,34,0.4); }
+.inv-item-emoji { font-size: 36px; line-height: 1; }
+.inv-item-name  { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.6); text-align: center; }
+.inv-item-count {
+  font-size: 15px; font-weight: 900; color: #2ecc71;
+  background: rgba(46,204,113,0.15);
+  border: 1px solid rgba(46,204,113,0.25);
+  border-radius: 8px; padding: 2px 10px; margin-top: 2px;
+}
+.inv-empty-state {
+  grid-column: 1/-1; text-align: center;
+  padding: 50px 20px; color: rgba(255,255,255,0.25);
+  font-size: 13px; line-height: 2;
+}
+.inv-empty-state .ies-icon { font-size: 48px; margin-bottom: 8px; }
+.inv-shop-btn {
+  flex-shrink: 0;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(46,204,113,0.2), rgba(39,174,96,0.1));
+  border: 1px solid rgba(46,204,113,0.4);
+  border-radius: 16px;
+  font-size: 14px; font-weight: 900; color: #2ecc71;
+  letter-spacing: 1px; text-align: center;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+</style>
+
+<!-- ====== PROFILE ====== -->
+<div id="s-profile" class="screen">
+  <!-- Background -->
+  <div class="prof-bg">
+    <img src="assets/img/Image_3982.jpg" onerror="this.style.display='none'">
+    <div class="prof-bg-overlay"></div>
+  </div>
+
+  <div class="prof-content">
+    <!-- Back -->
+    <div class="prof-back" onclick="show('menu')">◀</div>
+
+    <!-- HERO CARD — по макету -->
+    <div style="position:relative;border-radius:20px;background:linear-gradient(135deg,rgba(5,15,5,0.95),rgba(10,25,10,0.95));border:2px solid rgba(241,196,15,0.6);box-shadow:0 0 24px rgba(241,196,15,0.3),inset 0 0 30px rgba(0,0,0,0.5);">
+    <div style="position:relative;z-index:2;padding:14px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <!-- Аватар -->
+        <div style="width:80px;height:80px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#f1c40f,#2ecc71);padding:2.5px;box-shadow:0 0 20px rgba(241,196,15,0.6);">
+          <div style="width:100%;height:100%;border-radius:50%;background:#0a1a0a;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+            <img id="profileAvatarImg" src="assets/img/image_7.png" style="width:100%;height:100%;object-fit:cover;" onerror="this.src='assets/img/image_7.png'">
+          </div>
+        </div>
+        <!-- Инфо -->
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:20px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="profileName">Игрок</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin:2px 0 6px;" id="profileId">ID: #0000</div>
+          <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(46,204,113,0.2);border:1px solid rgba(46,204,113,0.5);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800;color:#2ecc71;">
+            <span style="width:6px;height:6px;background:#2ecc71;border-radius:50%;display:inline-block;box-shadow:0 0 6px #2ecc71;"></span> ОНЛАЙН
+          </div>
+        </div>
+        <!-- Уровень -->
+        <div style="flex-shrink:0;text-align:center;background:rgba(241,196,15,0.15);border:2px solid rgba(241,196,15,0.6);border-radius:14px;padding:8px 14px;box-shadow:0 0 16px rgba(241,196,15,0.3);">
+          <div style="font-size:9px;font-weight:800;color:rgba(241,196,15,0.7);letter-spacing:1px;">LVL</div>
+          <div style="font-size:28px;font-weight:900;color:#f1c40f;line-height:1;" id="profileLevelNum">1</div>
+        </div>
+      </div>
+      <!-- Прогресс бар -->
+      <div style="margin-top:12px;">
+        <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;margin-bottom:5px;">
+          <div id="profileLvlFill" style="height:100%;width:0%;background:linear-gradient(90deg,#2ecc71,#f1c40f);border-radius:6px;transition:width .6s;box-shadow:0 0 8px rgba(46,204,113,0.5);"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.4);">
+          <span id="profileLvlFrom">0</span>
+          <span id="profileLvlNext" style="color:rgba(255,255,255,0.55);">До LVL 2: 100 🎁</span>
+          <span id="profileLvlTo">100</span>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- ПРОГРЕСС ЗА СЕГОДНЯ + РАНГ -->
+    <div style="background:rgba(0,0,0,0.55);border:1px solid rgba(241,196,15,0.3);border-radius:16px;padding:12px 14px;backdrop-filter:blur(8px);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:16px;">🏆</span>
+          <span style="font-size:12px;font-weight:900;color:rgba(255,255,255,0.8);letter-spacing:0.5px;">ПРОГРЕСС</span>
+        </div>
+        <span style="font-size:12px;font-weight:800;color:#2ecc71;" id="profileTodayGifts">+0 за сегодня</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;">
+        <div id="profileLvlFill2" style="height:100%;width:0%;background:linear-gradient(90deg,#2ecc71,#f1c40f);border-radius:4px;transition:width .6s;"></div>
+      </div>
+    </div>
+
+    <!-- РАНГ + GRINCH -->
+    <div style="background:rgba(0,0,0,0.55);border:1px solid rgba(241,196,15,0.25);border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;backdrop-filter:blur(8px);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:26px;">🏆</span>
+        <div>
+          <div style="font-size:15px;font-weight:900;color:#f1c40f;"><span id="profileSeasonRank">#???</span> в сезоне</div>
+          <div style="font-size:13px;font-weight:800;color:#2ecc71;"><span id="pGrinch">0</span> GRINCH</div>
+        </div>
+      </div>
+      <div style="text-align:right;cursor:pointer;" onclick="show('rating')">
+        <div style="background:rgba(241,196,15,0.2);border:1.5px solid rgba(241,196,15,0.5);border-radius:10px;padding:6px 12px;">
+          <div style="font-size:13px;font-weight:900;color:#f1c40f;">ТОП <span id="profileTopPct">50%</span></div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.4);">игроков ›</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ДВЕ КАРТОЧКИ — Подарки + Рефералы -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="background:rgba(0,0,0,0.55);border:1.5px solid rgba(41,182,246,0.4);border-radius:16px;padding:12px 14px;backdrop-filter:blur(8px);">
+        <div style="font-size:26px;margin-bottom:4px;">🎁</div>
+        <div style="font-size:22px;font-weight:900;color:#f1c40f;" id="pGifts">0</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Подарки</div>
+      </div>
+      <div style="background:rgba(0,0,0,0.55);border:1.5px solid rgba(46,204,113,0.4);border-radius:16px;padding:12px 14px;backdrop-filter:blur(8px);">
+        <div style="font-size:26px;margin-bottom:4px;">👥</div>
+        <div style="font-size:22px;font-weight:900;color:#2ecc71;" id="pRefs">0</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Рефералы</div>
+      </div>
+    </div>
+
+    <!-- Скрытые элементы -->
+    <div style="display:none;">
+      <span id="pRefEarned">0</span>
+      <span id="skinBadge">DEFAULT</span>
+      <span id="profileSeasonBank">0</span>
+      <span id="profileLevel">LVL 1</span>
+      <span id="profileLvlTo2"></span>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="prof-actions">
+      <div class="prof-action-btn wallet" onclick="show('wallet');renderWalletScreen()">
+        <div class="pab-icon">💎</div>
+        <div class="pab-label">КОШЕЛЁК</div>
+        <div class="pab-sub" id="walletBadge">TON · Транзакции</div>
+      </div>
+      <div class="prof-action-btn inventory" onclick="show('inventory');renderInventoryScreen()">
+        <div class="pab-icon">🎒</div>
+        <div class="pab-label">ИНВЕНТАРЬ</div>
+        <div class="pab-sub" id="invBadge">Баффы · Предметы</div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <!-- Side boost panel (preserved) -->
+  <div id="boostPanel" style="position:absolute;left:-110px;top:50%;transform:translateY(-50%);z-index:29;background:rgba(3,7,6,.45);border:1px solid rgba(46,204,113,.2);border-radius:0 16px 16px 0;padding:10px 8px;display:flex;flex-direction:column;gap:8px;transition:left .25s cubic-bezier(.4,0,.2,1);min-width:100px;backdrop-filter:blur(12px);">
+    <div style="font-size:9px;color:rgba(255,255,255,.35);letter-spacing:1px;text-align:center;text-transform:uppercase;">Бафы</div>
+    <div onclick="useItem('slow');closeBoostPanel();" style="display:flex;align-items:center;gap:8px;background:rgba(52,152,219,.1);border:1px solid rgba(52,152,219,.25);border-radius:10px;padding:7px 10px;cursor:pointer;">
+      <span style="font-size:22px;">⏱️</span>
+      <div><div style="font-size:11px;font-weight:700;color:white;">Замедл.</div><div id="bp-slow" style="font-size:10px;color:rgba(52,152,219,.9);">×0</div></div>
+    </div>
+    <div onclick="useItem('magnet');closeBoostPanel();" style="display:flex;align-items:center;gap:8px;background:rgba(142,68,173,.1);border:1px solid rgba(142,68,173,.25);border-radius:10px;padding:7px 10px;cursor:pointer;">
+      <span style="font-size:22px;">🌙</span>
+      <div><div style="font-size:11px;font-weight:700;color:white;">Магнит</div><div id="bp-magnet" style="font-size:10px;color:rgba(142,68,173,.9);">×0</div></div>
+    </div>
+    <div onclick="useItem('totem');closeBoostPanel();" style="display:flex;align-items:center;gap:8px;background:rgba(155,89,182,.1);border:1px solid rgba(155,89,182,.25);border-radius:10px;padding:7px 10px;cursor:pointer;">
+      <span style="font-size:22px;">🗿</span>
+      <div><div style="font-size:11px;font-weight:700;color:white;">Тотем</div><div id="bp-totem" style="font-size:10px;color:rgba(155,89,182,.9);">×0</div></div>
+    </div>
+    <div onclick="useItem('star');closeBoostPanel();" style="display:flex;align-items:center;gap:8px;background:rgba(241,196,15,.1);border:1px solid rgba(241,196,15,.25);border-radius:10px;padding:7px 10px;cursor:pointer;">
+      <span style="font-size:22px;">⭐</span>
+      <div><div style="font-size:11px;font-weight:700;color:white;">x2 хруст</div><div id="bp-star" style="font-size:10px;color:rgba(241,196,15,.9);">×0</div></div>
+    </div>
+    <div onclick="useItem('hp');closeBoostPanel();" style="display:flex;align-items:center;gap:8px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.25);border-radius:10px;padding:7px 10px;cursor:pointer;">
+      <span style="font-size:22px;">❤️</span>
+      <div><div style="font-size:11px;font-weight:700;color:white;">+1 HP</div><div id="bp-hp" style="font-size:10px;color:rgba(231,76,60,.9);">×0</div></div>
+    </div>
+    <div onclick="show('shop')" style="text-align:center;font-size:10px;color:rgba(46,204,113,.7);padding:4px;cursor:pointer;border-top:1px solid rgba(46,204,113,.1);padding-top:6px;">+ Купить</div>
+  </div>
+</div>
+
+<!-- ====== WALLET SCREEN ====== -->
+<div id="s-wallet" class="screen">
+  <div class="wlt-bg"></div>
+  <div class="wlt-content">
+
+    <div class="wlt-header" style="flex-shrink:0;">
+      <div class="prof-back" onclick="show('profile')">◀</div>
+      <div class="wlt-header-title">💎 КОШЕЛЁК</div>
+      <div style="width:34px;"></div>
+    </div>
+
+    <!-- TON balance -->
+    <div class="wlt-balances">
+      <div class="wlt-bal">
+        <div class="wlt-bal-icon" style="font-size:38px;">💎</div>
+        <div class="wlt-bal-val" id="wltTon">0.00</div>
+        <div class="wlt-bal-lbl">TON</div>
+      </div>
+      <div class="wlt-bal">
+        <div class="wlt-bal-icon">
+          <img src="assets/img/Image_3986.jpg" style="width:42px;height:42px;object-fit:cover;border-radius:50%;box-shadow:0 0 12px rgba(46,204,113,0.6);"
+            onerror="this.outerHTML='<span style=font-size:38px>🟢</span>'">
+        </div>
+        <div class="wlt-bal-val" id="wltGrinch">0</div>
+        <div class="wlt-bal-lbl">GRINCH</div>
+      </div>
+    </div>
+
+    <!-- Address card -->
+    <div class="wlt-card">
+      <div class="wlt-card-label">Адрес кошелька</div>
+      <div class="wlt-card-addr empty" id="wltAddr">Кошелёк не подключён</div>
+    </div>
+
+    <!-- Connect/Disconnect button -->
+    <div id="walletBlock">
+      <button class="wlt-connect-btn" onclick="connectWallet()">
+        💎 Подключить кошелёк
+      </button>
+    </div>
+
+    <!-- Transactions -->
+    <div class="wlt-tx-title">📋 Транзакции</div>
+    <div class="wlt-tx-list" id="wltTxList">
+      <div class="wlt-empty">История транзакций пуста</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ====== INVENTORY SCREEN ====== -->
+<style>
+/* ── INV TABS ── */
+.inv-tabs-row {
+  display: flex; gap: 5px; flex-shrink: 0;
+}
+.inv-tab {
+  flex: 1; padding: 8px 4px; text-align: center;
+  font-size: 13px; font-weight: 900; letter-spacing: 0.3px;
+  border-radius: 12px; cursor: pointer;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.4);
+  transition: all .2s; -webkit-tap-highlight-color: transparent;
+  line-height: 1.4;
+}
+.inv-tab.active { background: rgba(46,204,113,0.18); border-color: rgba(46,204,113,0.5); color: #2ecc71; }
+
+.inv-pane { display: none; flex: 1; overflow-y: auto; }
+.inv-pane.active { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── CHEST CARDS ── */
+.inv-chest-card {
+  border-radius: 18px; padding: 14px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform .12s; flex-shrink: 0;
+}
+.inv-chest-card:active { transform: scale(0.97); }
+.inv-chest-card.common    { background: linear-gradient(135deg,rgba(100,60,20,0.55),rgba(50,25,5,0.45)); border: 1px solid rgba(139,90,43,0.55); }
+.inv-chest-card.rare      { background: linear-gradient(135deg,rgba(100,80,0,0.55),rgba(60,45,0,0.45)); border: 1px solid rgba(255,215,0,0.55); }
+.inv-chest-card.legendary { background: linear-gradient(135deg,rgba(60,20,100,0.55),rgba(30,5,60,0.45)); border: 1px solid rgba(147,112,219,0.65); }
+.inv-chest-emoji { font-size: 50px; flex-shrink: 0; line-height: 1; }
+.inv-chest-info  { flex: 1; min-width: 0; }
+.inv-chest-name  { font-family: 'Grinched', cursive; font-size: 20px; letter-spacing: 1.5px; margin-bottom: 2px; }
+.inv-chest-card.common    .inv-chest-name { color: #cd853f; }
+.inv-chest-card.rare      .inv-chest-name { color: #ffd700; }
+.inv-chest-card.legendary .inv-chest-name { color: #bf9fff; }
+.inv-chest-rar { font-size: 9px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; opacity: 0.5; margin-bottom: 6px; }
+.inv-chest-card.common    .inv-chest-rar { color: #cd853f; }
+.inv-chest-card.rare      .inv-chest-rar { color: #ffd700; }
+.inv-chest-card.legendary .inv-chest-rar { color: #bf9fff; }
+.inv-chest-drops { font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.5; margin-bottom: 8px; }
+.inv-chest-btn {
+  width: 100%; padding: 9px; border: none; border-radius: 10px;
+  font-size: 12px; font-weight: 800; letter-spacing: 1px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.inv-chest-card.common    .inv-chest-btn { background: rgba(139,90,43,0.25); border: 1px solid rgba(139,90,43,0.45); color: #cd853f; }
+.inv-chest-card.rare      .inv-chest-btn { background: rgba(255,215,0,0.12); border: 1px solid rgba(255,215,0,0.38); color: #ffd700; }
+.inv-chest-card.legendary .inv-chest-btn { background: rgba(147,112,219,0.18); border: 1px solid rgba(147,112,219,0.45); color: #bf9fff; }
+.inv-chest-count { background: rgba(0,0,0,0.55); border-radius: 12px; padding: 8px 14px; text-align: center; flex-shrink: 0; }
+.inv-chest-count-num { font-size: 26px; font-weight: 900; color: #fff; display: block; }
+.inv-chest-count-lbl { font-size: 8px; color: rgba(255,255,255,0.3); font-weight: 700; letter-spacing: 1px; }
+
+</style>
+
+<div id="s-inventory" class="screen">
+  <div class="inv-bg">
+    <video autoplay muted loop playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;"><source src="assets/video/Image_3984.mp4" type="video/mp4"></video>
+    <div class="inv-bg-overlay"></div>
+  </div>
+  <div class="inv-content">
+
+    <div class="inv-header">
+      <div class="prof-back" onclick="show('profile')">◀</div>
+      <div class="inv-header-title">ИНВЕНТАРЬ</div>
+      <div style="width:34px;"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="inv-tabs-row">
+      <div class="inv-tab active" id="itab-boosts"  onclick="switchInvTab('boosts')">⚡<br>Баффы</div>
+      <div class="inv-tab"        id="itab-res"     onclick="switchInvTab('res')">🎁<br>Ресурсы</div>
+      <div class="inv-tab"        id="itab-nft"     onclick="switchInvTab('nft')">🖼️<br>NFT</div>
+    </div>
+
+    <!-- Боффы -->
+    <div id="inv-content-boosts" style="flex:1;overflow-y:auto;padding:4px 0;">
+      <div id="invGridBoosts"></div>
+    </div>
+
+    <!-- Ресурсы -->
+    <div id="inv-content-res" style="display:none;flex:1;overflow-y:auto;flex-direction:column;gap:8px;padding-top:4px;">
+      <div id="invGridRes" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- NFT -->
+    <div id="inv-content-nft" style="display:none;flex:1;overflow-y:auto;">
+      <div id="invGridNft"></div>
+    </div>
+
+    
+
+  </div>
+</div>
+
+<!-- ====== PROFILE + INVENTORY JS ====== -->
+<script>
+// renderInventoryScreen и switchInvTab определены в profile.js
+function renderResources(){
+  var S=window.S||{};
+  var g=document.getElementById('ir-gifts');   if(g) g.textContent=(S.gifts||0).toLocaleString();
+  var gr=document.getElementById('ir-grinch'); if(gr) gr.textContent=(S.grinch||0).toLocaleString();
+}
+
+function renderInventoryScreen(){
+  var grid = document.getElementById('inventoryGrid');
+  if(!grid) return;
+  var S = window.S || {};
+  var inv = S.inv || S.items || {};
+
+  var META = {
+    slow:    {emoji:'⏱️', name:'Замедление',    cls:'slow'},
+    magnet:  {emoji:'🌙', name:'Магнит',         cls:'magnet'},
+    totem:   {emoji:'🗿', name:'Тотем',          cls:'totem'},
+    star:    {emoji:'⭐', name:'Звёзд. хруст',   cls:'star'},
+    hp:      {emoji:'❤️', name:'Доп. жизнь',     cls:'hp'},
+    autobet: {emoji:'🤖', name:'Автосбор',        cls:'autobet'},
+  };
+
+  var keys = Object.keys(inv).filter(function(k){ return (inv[k]||0) > 0; });
+
+  if(!keys.length){
+    grid.innerHTML = '<div class="inv-empty-state"><div class="ies-icon">🎒</div>Инвентарь пуст 😢<br>Купи предметы в магазине!</div>';
+    return;
+  }
+
+  grid.innerHTML = keys.map(function(k){
+    var m = META[k] || {emoji:'❓', name:k, cls:''};
+    return '<div class="inv-item '+m.cls+'" onclick="useItemFromInv(\''+k+'\')">'
+      + '<div class="inv-item-emoji">'+m.emoji+'</div>'
+      + '<div class="inv-item-name">'+m.name+'</div>'
+      + '<div class="inv-item-count">×'+inv[k]+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+function useItemFromInv(key){
+  if(typeof useItem === 'function') useItem(key);
+  renderInventoryScreen();
+}
+
+// ── Inventory tabs ──
+function invTab(idx){
+  for(var i=0;i<4;i++){
+    var t=document.getElementById('invT'+i);
+    var p=document.getElementById('invP'+i);
+    if(t) t.classList.toggle('active',i===idx);
+    if(p) p.classList.toggle('active',i===idx);
+  }
+  if(idx===1) renderInventoryScreen();
+  if(idx===2) renderResources();
+  if(idx===3) renderNFTTab();
+}
+
+function renderResources(){
+  var S=window.S||{};
+  var g=document.getElementById('ir-gifts');   if(g) g.textContent=(S.gifts||0).toLocaleString();
+  var gr=document.getElementById('ir-grinch'); if(gr) gr.textContent=(S.grinch||0).toLocaleString();
+}
+
+// renderInventoryScreen — стартуем с баффов (не chests, которых нет в HTML)
+function renderInventoryScreen(){
+  if(typeof switchInvTab==='function') switchInvTab('boosts');
+}
+
+// Патч switchInvTab — добавляем заглушку для 'chests' чтобы не крашилось
+var _origSwitchInvTab = null;
+document.addEventListener('DOMContentLoaded', function(){
+  if(typeof switchInvTab === 'function'){
+    _origSwitchInvTab = switchInvTab;
+    window.switchInvTab = function(tab){
+      // chests убраны — редиректим на boosts
+      if(tab === 'chests') tab = 'boosts';
+      _origSwitchInvTab(tab);
+    };
+  }
+});
+
+function renderWallet(){
+  var S = window.S || {};
+  var el = document.getElementById('wltAddr');
+  var gEl = document.getElementById('wltGrinch');
+  var tEl = document.getElementById('wltTon');
+  if(gEl) gEl.textContent = S.grinch || 0;
+  if(tEl) tEl.textContent = parseFloat(S.ton || 0).toFixed(2);
+
+  // address
+  var addr = '';
+  try{
+    var tc = document.querySelector('tc-root') || document.querySelector('[data-tc-wallets-modal-container]');
+    if(S.walletAddr) addr = S.walletAddr;
+  }catch(e){}
+  if(el){
+    if(addr){ el.textContent = addr; el.className = 'wlt-card-addr'; }
+    else { el.textContent = 'Кошелёк не подключён'; el.className = 'wlt-card-addr empty'; }
+  }
+
+  // transactions from localStorage
+  var txEl = document.getElementById('wltTxList');
+  if(!txEl) return;
+  var txs = [];
+  try{ txs = JSON.parse(localStorage.getItem('grinch_txs') || '[]'); }catch(e){}
+  if(!txs.length){ txEl.innerHTML = '<div class="wlt-empty">История транзакций пуста</div>'; return; }
+  txEl.innerHTML = txs.slice().reverse().slice(0,20).map(function(tx){
+    var sign = tx.type==='in' ? '+' : '-';
+    var cls  = tx.type==='in' ? 'plus' : 'minus';
+    var date = tx.date ? new Date(tx.date).toLocaleDateString('ru') : '—';
+    return '<div class="wlt-tx-row">'
+      + '<div class="wlt-tx-icon">'+(tx.icon||'💎')+'</div>'
+      + '<div class="wlt-tx-info"><div class="wlt-tx-name">'+(tx.name||'Транзакция')+'</div><div class="wlt-tx-date">'+date+'</div></div>'
+      + '<div class="wlt-tx-amt '+cls+'">'+sign+(tx.amt||0)+' '+(tx.currency||'TON')+'</div>'
+      + '</div>';
+  }).join('');
+}
+</script>
+
+<!-- ====== RATING ====== -->
+<div id="s-rating" class="screen">
+  <div class="page-header">
+    <div class="ph-back" onclick="show('menu')">◀</div>
+    <div class="ph-title">🏆 ТОП-50</div>
+    <div class="ph-right"></div>
+  </div>
+  <div class="rating-prize-banner">
+    <div class="rpb-icon">🏆</div>
+    <div class="rpb-text"><strong>Призовой пул: 100 TON</strong> для участников топа в конце сезона. Играй больше — попади в топ!</div>
+  </div>
+  <div class="rating-list" id="ratingList"></div>
+</div>
+
+<!-- ====== FRIENDS ====== -->
+<div id="s-friends" class="screen" style="background:radial-gradient(ellipse at 50% 0%,#0d2a1a 0%,#071510 60%);">
+  <div class="page-header">
+    <div class="ph-back" onclick="show('menu')">◀</div>
+    <div class="ph-title">👥 ДРУЗЬЯ</div>
+    <div class="ph-right"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;padding-bottom:24px;">
+
+    <!-- Реферальная ссылка -->
+    <div style="background:linear-gradient(135deg,rgba(46,204,113,0.12),rgba(39,174,96,0.06));border:1px solid rgba(46,204,113,0.3);border-radius:20px;padding:16px;">
+      <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:6px;">💸 Зарабатывай с друзей</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.6;margin-bottom:12px;">Приглашай друзей и получай процент от их заработка — автоматически и навсегда!</div>
+
+      <!-- Проценты -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+        <div style="background:rgba(0,0,0,0.25);border-radius:12px;padding:10px 6px;text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:#2ecc71;">20%</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:2px;">от подарков</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.25);border-radius:12px;padding:10px 6px;text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:#f1c40f;">20%</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:2px;">от GRINCH</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.25);border-radius:12px;padding:10px 6px;text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:#29b6f6;">∞</div>
+          <div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:2px;">без лимита</div>
+        </div>
+      </div>
+
+      <!-- Ссылка -->
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(46,204,113,0.2);border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="font-size:11px;color:#2ecc71;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" id="fRefLink">t.me/GrinchGameBot?start=ref_...</div>
+        <div onclick="copyRefLink()" style="background:rgba(46,204,113,0.2);border:1px solid rgba(46,204,113,0.4);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;color:#2ecc71;cursor:pointer;flex-shrink:0;">📋 Копировать</div>
+      </div>
+
+      <button onclick="inviteFriend()" style="width:100%;padding:14px;background:linear-gradient(135deg,#2ecc71,#27ae60);border:none;border-radius:14px;font-size:15px;font-weight:800;color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(46,204,113,0.35);">📤 Поделиться в Telegram</button>
+    </div>
+
+    <!-- Статистика заработка -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <!-- Друзья -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(46,204,113,0.2);border-radius:16px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">👥 Друзей</div>
+        <div style="font-size:32px;font-weight:900;color:#2ecc71;line-height:1;" id="fCount">0</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">приглашено</div>
+      </div>
+      <!-- GRINCH заработано -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(241,196,15,0.2);border-radius:16px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">🟢 GRINCH</div>
+        <div style="font-size:32px;font-weight:900;color:#f1c40f;line-height:1;" id="fEarned">0</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">заработано</div>
+      </div>
+    </div>
+
+    <!-- TON бонус + подарки от рефов -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div style="background:linear-gradient(135deg,rgba(0,136,204,0.1),rgba(0,80,140,0.07));border:1px solid rgba(0,136,204,0.25);border-radius:16px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">💎 TON бонус</div>
+        <div style="font-size:28px;font-weight:900;color:#29b6f6;line-height:1;" id="fRefBonus">0.00</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">от депозитов</div>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(241,196,15,0.1),rgba(230,126,34,0.07));border:1px solid rgba(241,196,15,0.2);border-radius:16px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">🎁 Подарков</div>
+        <div style="font-size:28px;font-weight:900;color:#f1c40f;line-height:1;" id="fRefGifts">0</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">от рефералов</div>
+      </div>
+    </div>
+
+    <!-- Как это работает -->
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);letter-spacing:.1em;text-transform:uppercase;">📖 Как это работает</div>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="width:24px;height:24px;background:rgba(46,204,113,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#2ecc71;flex-shrink:0;">1</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.5;">Поделись ссылкой с другом</div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="width:24px;height:24px;background:rgba(46,204,113,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#2ecc71;flex-shrink:0;">2</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.5;">Друг регистрируется и играет</div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="width:24px;height:24px;background:rgba(46,204,113,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#2ecc71;flex-shrink:0;">3</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.5;">Ты получаешь <b style="color:#2ecc71;">20%</b> от всего что он зарабатывает — подарки и GRINCH</div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="width:24px;height:24px;background:rgba(0,136,204,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#29b6f6;flex-shrink:0;">💎</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.5;">Если друг покупает TON — ты получаешь <b style="color:#29b6f6;">20% в TON</b> на свой кошелёк</div>
+      </div>
+    </div>
+
+    <!-- Список друзей -->
+    <div style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:.1em;text-transform:uppercase;">МОИ РЕФЕРАЛЫ</div>
+    <div id="friendsList"></div>
+
+  </div>
+</div>
+
+<!-- ====== QUESTS ====== -->
+<div id="s-quests" class="screen">
+  <div class="page-header">
+    <div class="ph-back" onclick="show('menu')">◀</div>
+    <div class="ph-title">📋 ЗАДАНИЯ</div>
+    <div class="ph-right"></div>
+  </div>
+  <!-- Quest tabs -->
+  <div style="display:flex;width:100%;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div class="qtab active" id="qtab0" onclick="questTab(0)" style="flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:700;color:var(--green);border-bottom:2px solid var(--green);cursor:pointer;letter-spacing:.5px;">🎁 ИГРОВЫЕ</div>
+    <div class="qtab" id="qtab1" onclick="questTab(1)" style="flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer;letter-spacing:.5px;">📢 КАНАЛЫ</div>
+    <div class="qtab" id="qtab2" onclick="questTab(2)" style="flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer;letter-spacing:.5px;">🪙 КУПИТЬ</div>
+  </div>
+  <div class="quests-list" id="questsList"></div>
+</div>
+
+
+<!-- ====== TON DEPOSIT MODAL ====== -->
+<!-- TON modal replaced by txStatusModal in ton.js -->
+<div id="tonDepositModal" style="display:none;"></div>
+<div id="tonTxStatus" style="display:none;"></div>
+
+<div id="txVerifyModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);backdrop-filter:blur(10px);z-index:998;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:linear-gradient(135deg,#071a14,#0a2018);border:1px solid rgba(46,204,113,.3);border-radius:24px;padding:24px 20px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px;">
+    <div style="font-size:18px;font-weight:800;color:#fff;text-align:center;">💎 Подтверждение покупки</div>
+    <div style="font-size:12px;color:rgba(255,255,255,.5);text-align:center;line-height:1.6;">Вставь хэш транзакции из кошелька</div>
+    <div style="background:rgba(0,0,0,.3);border:1px solid rgba(46,204,113,.2);border-radius:12px;padding:12px;">
+      <div style="font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1px;margin-bottom:6px;">TXID / ХЭШ ТРАНЗАКЦИИ</div>
+      <input id="txHashInput" type="text" placeholder="Вставь хэш из Tonkeeper..." style="width:100%;background:transparent;border:none;outline:none;color:#2ecc71;font-size:12px;font-weight:600;font-family:monospace;">
+    </div>
+    <div style="font-size:10px;color:rgba(255,255,255,.3);line-height:1.5;">📱 Найди хэш в истории кошелька после покупки GRINCH</div>
+    <div id="txVerifyStatus" style="display:none;"></div>
+    <button onclick="submitTxVerify()" style="width:100%;padding:14px;background:linear-gradient(135deg,#2ecc71,#27ae60);border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;">✅ Подтвердить</button>
+    <div onclick="closeTxModal2()" style="text-align:center;font-size:12px;color:rgba(255,255,255,.3);cursor:pointer;">Отмена</div>
+  </div>
+</div>
+  
+<!-- ====== MINING ====== -->
+<style>
+@keyframes claimPulse{0%,100%{box-shadow:0 4px 24px rgba(46,204,113,0.5),0 0 0 0 rgba(46,204,113,0.3);}50%{box-shadow:0 6px 32px rgba(46,204,113,0.8),0 0 0 8px rgba(46,204,113,0);}}
+@keyframes miningGlow{0%,100%{text-shadow:0 0 8px rgba(46,204,113,0.6);}50%{text-shadow:0 0 18px rgba(46,204,113,1),0 0 30px rgba(46,204,113,0.4);}}
+</style>
+<div id="s-mining" class="screen" style="position:relative;overflow:hidden;background:#030d03;">
+
+  <!-- Фон — рождественская деревня -->
+  <div style="position:absolute;inset:0;z-index:0;">
+    <img src="assets/img/Image_293.jpg" style="width:100%;height:100%;object-fit:cover;opacity:0.9;" onerror="this.style.display='none'">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.1) 0%,rgba(0,0,0,0.2) 50%,rgba(0,0,0,0.75) 100%);"></div>
+  </div>
+
+  <div style="position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- ── Шапка ── -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:max(14px,env(safe-area-inset-top)) 16px 8px;flex-shrink:0;">
+      <div onclick="show('menu')" style="width:38px;height:38px;background:rgba(0,0,0,0.55);border:1.5px solid rgba(255,255,255,0.18);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;color:#fff;-webkit-tap-highlight-color:transparent;">◀</div>
+      <div style="text-align:center;">
+        <div style="font-size:20px;font-weight:900;color:#2ecc71;letter-spacing:1px;animation:miningGlow 2.5s ease-in-out infinite;">⛏️ МАЙНИНГ</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:0.5px;">Пассивный доход 24/7</div>
+      </div>
+      <div onclick="show('settings')" style="width:38px;height:38px;background:rgba(0,0,0,0.55);border:1.5px solid rgba(255,255,255,0.18);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;-webkit-tap-highlight-color:transparent;">⚙️</div>
+    </div>
+
+    <!-- ── Курс + Доход — одна рамка как на макете ── -->
+    <div style="margin:0 12px 6px;background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:8px 12px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <span style="font-size:10px;color:rgba(255,255,255,0.7);">📈 Курс GRINCH</span>
+        <span style="font-size:13px;font-weight:900;color:#2ecc71;text-shadow:0 0 8px rgba(46,204,113,0.5);" id="grinchRateDisplay">Загрузка...</span>
+        <div onclick="fetchGrinchRate()" style="width:34px;height:34px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;">🔄</div>
+      </div>
+      <div style="height:1px;background:rgba(255,255,255,0.07);margin-bottom:5px;"></div>
+      <div style="text-align:center;font-size:12px;color:rgba(255,255,255,0.7);">
+        Доход: <span style="color:#ffe44d;font-weight:900;" id="miningTotalIncome">Нет майнеров</span>
+        <span style="color:rgba(46,204,113,0.9);" id="miningNextIncome"></span>
+      </div>
+    </div>
+
+    <!-- ── Кнопка Собрать — пропорции как на макете ── -->
+    <div style="margin:0 12px 2px;flex-shrink:0;position:relative;">
+      <button id="miningClaimBtn" onclick="claimMining()" style="width:100%;height:58px;padding:0;background:none;border:none;cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent;display:block;">
+        <img src="assets/img/image_901.png" style="width:100%;height:100%;object-fit:cover;object-position:center;border-radius:14px;display:block;" onerror="this.style.display='none'">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:24px;">
+          <span id="miningClaimText" style="font-size:17px;font-weight:900;color:#ffe44d;letter-spacing:0.3px;text-shadow:0 0 10px rgba(255,180,0,0.9),0 2px 4px rgba(0,0,0,0.9);">Собрать всё</span>
+        </div>
+      </button>
+    </div>
+
+    <!-- ── Таймер вплотную к кнопке ── -->
+    <div style="text-align:center;margin:3px 12px 6px;flex-shrink:0;">
+      <div style="font-size:11px;color:rgba(200,255,200,0.5);font-weight:600;" id="miningTimerDisplay"></div>
+    </div>
+
+    <!-- ── Табы ── -->
+    <div style="display:flex;margin:0 12px 8px;background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:3px;flex-shrink:0;">
+      <div id="miningTab0" onclick="switchMiningTab(0)" style="flex:1;padding:9px;text-align:center;font-size:12px;font-weight:900;border-radius:11px;cursor:pointer;background:rgba(241,196,15,0.2);color:#f1c40f;border:1px solid rgba(241,196,15,0.3);-webkit-tap-highlight-color:transparent;">⛏️ Шахты</div>
+      <div id="miningTab1" onclick="switchMiningTab(1)" style="flex:1;padding:9px;text-align:center;font-size:12px;font-weight:600;border-radius:11px;cursor:pointer;color:rgba(255,255,255,0.4);-webkit-tap-highlight-color:transparent;">💎 GRINCH</div>
+    </div>
+
+    <!-- ── Список майнеров ── -->
+    <div id="miningList" style="flex:1;overflow-y:auto;padding:0 12px 8px;display:flex;flex-direction:column;gap:8px;"></div>
+
+    <!-- ── Статистика внизу — чёрная полупрозрачная как на макете ── -->
+    <div id="miningStatsBar" style="flex-shrink:0;margin:0 12px;margin-bottom:max(10px,env(safe-area-inset-bottom));padding:10px 14px;background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.1);border-radius:14px;font-size:11px;"></div>
+
+  </div>
+</div>
+
+<script>
+// Миграция: переносим данные из старого ключа 'daily' в 'gd2' (используется daily2.js)
+try {
+  if (!localStorage.getItem('gd2')) {
+    var _old = JSON.parse(localStorage.getItem('daily') || '{"streak":0,"lastClaim":0}');
+    // lastClaim из будущего — невалиден, сбросить
+    if (_old.lastClaim > Date.now()) _old.lastClaim = 0;
+    localStorage.setItem('gd2', JSON.stringify({
+      streak: _old.streak || 0,
+      lastClaim: _old.lastClaim || 0
+    }));
+  }
+} catch(e) {}
+</script>
+<script src="js/config.js"></script>
+<script src="js/init.js"></script>
+<script src="js/state.js"></script>
+<script src="js/game.js"></script>
+<script src="js/shop.js"></script>
+<!-- dailyScreen строится динамически в daily.js -->
+
+<script src="js/ton.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/pvp.js"></script>
+<script src="js/mining.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/daily2.js?v=19"></script>
+
+
+<!-- ====== DAILY SCREEN ====== -->
+<style>
+#s-daily {
+  position:relative!important; overflow:hidden!important;
+  background:#010a01!important; flex-direction:column!important;
+  height:100svh!important; max-height:100svh!important;
+}
+#s-daily.active{display:flex!important;}
+#s-daily .daily-content{
+  position:relative;z-index:3;width:100%;flex:1;
+  display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;
+}
+
+/* ═══ КАРТОЧКИ ═══ */
+#dCardsTrack{
+  display:flex!important;
+  flex-direction:row!important;
+  gap:6px!important;
+  padding:0 8px!important;
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  flex-shrink:0!important;
+  scroll-snap-type:x mandatory!important;
+  -webkit-overflow-scrolling:touch!important;
+  scrollbar-width:none!important;
+}
+#dCardsTrack::-webkit-scrollbar{display:none!important;}
+#dCardsTrack .dcard{
+  scroll-snap-align:center!important;
+  flex-shrink:0!important;
+  width:72px!important;
+  min-width:72px!important;
+}
+/* Базовая */
+.dcard{
+  border-radius:10px!important;
+  display:flex!important; flex-direction:column!important;
+  align-items:center!important; justify-content:space-between!important;
+  padding:5px 2px 5px!important;
+  box-sizing:border-box!important;
+  height:110px!important;
+  width:100%!important;
+  position:relative!important; flex:none!important;
+  overflow:hidden!important;
+  background:linear-gradient(170deg,rgba(12,38,18,0.97),rgba(5,16,8,0.99))!important;
+  border:1.5px solid rgba(180,130,30,0.55)!important;
+  box-shadow:inset 0 1px 0 rgba(255,210,60,0.10),0 2px 10px rgba(0,0,0,0.70),0 0 0 1px rgba(0,0,0,0.3)!important;
+  opacity:0.92!important;
+}
+.dcard.done{
+  opacity:1!important;
+  border-color:rgba(46,180,90,0.50)!important;
+  background:linear-gradient(170deg,rgba(8,32,14,0.97),rgba(3,14,7,0.99))!important;
+  box-shadow:inset 0 1px 0 rgba(80,255,120,0.08),0 2px 10px rgba(0,0,0,0.70)!important;
+}
+.dcard.next{opacity:1!important;border-color:rgba(180,130,30,0.70)!important;box-shadow:inset 0 1px 0 rgba(255,210,60,0.12),0 2px 10px rgba(0,0,0,0.70)!important;}
+/* Активная — та же высота, просто ярче и больше картинка */
+.dcard.cur{
+  background:linear-gradient(170deg,rgba(50,28,0,0.99),rgba(22,10,0,0.99))!important;
+  border:2px solid #c8960e!important;
+  box-shadow:
+    0 0 0 1px rgba(255,215,60,0.35),
+    0 0 14px 4px rgba(255,180,0,0.90),
+    0 0 36px 8px rgba(255,150,0,0.45),
+    inset 0 1px 0 rgba(255,225,80,0.14)!important;
+  height:110px!important; opacity:1!important; z-index:5!important;
+  animation:dPG 2s ease-in-out infinite!important;
+}
+.dcard.gcur{
+  background:linear-gradient(170deg,rgba(0,35,14,0.99),rgba(0,14,5,0.99))!important;
+  border:2px solid #19a050!important;
+  box-shadow:
+    0 0 0 1px rgba(46,204,113,0.38),
+    0 0 14px 4px rgba(46,204,113,0.90),
+    0 0 36px 8px rgba(46,204,113,0.45),
+    inset 0 1px 0 rgba(80,255,140,0.10)!important;
+  height:110px!important; opacity:1!important; z-index:5!important;
+  animation:dPGG 2s ease-in-out infinite!important;
+}
+@keyframes dPG{
+  0%,100%{box-shadow:0 0 0 1px rgba(255,215,60,.35),0 0 12px 3px rgba(255,180,0,.85),0 0 32px 7px rgba(255,150,0,.42),inset 0 1px 0 rgba(255,225,80,.14);}
+  50%    {box-shadow:0 0 0 1px rgba(255,230,80,.55),0 0 24px 7px rgba(255,210,0,1),0 0 58px 12px rgba(255,170,0,.65),inset 0 1px 0 rgba(255,240,100,.22);}
+}
+@keyframes dPGG{
+  0%,100%{box-shadow:0 0 0 1px rgba(46,204,113,.38),0 0 12px 3px rgba(46,204,113,.85),0 0 32px 7px rgba(46,204,113,.42),inset 0 1px 0 rgba(80,255,140,.10);}
+  50%    {box-shadow:0 0 0 1px rgba(70,240,130,.55),0 0 24px 7px rgba(46,220,130,1),0 0 58px 12px rgba(46,204,113,.65),inset 0 1px 0 rgba(110,255,160,.20);}
+}
+
+/* День лейбл */
+.dcard-day{font-size:8px!important;font-weight:700!important;color:rgba(255,255,255,0.55)!important;line-height:1!important;z-index:1!important;}
+.dcard.cur  .dcard-day{color:#f5c518!important;font-size:9px!important;font-weight:900!important;text-shadow:0 0 8px rgba(255,200,0,.9);}
+.dcard.gcur .dcard-day{color:#2ecc71!important;font-size:9px!important;font-weight:900!important;text-shadow:0 0 8px rgba(46,204,113,.9);}
+.dcard.done .dcard-day{color:rgba(80,180,100,0.55)!important;}
+
+/* Картинка — одинаковый размер у всех, только у cur/gcur больше */
+.dcard-img{
+  width:64px!important;height:64px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  position:relative!important;flex-shrink:0!important;
+  filter:drop-shadow(0 2px 5px rgba(0,0,0,0.65))!important;
+  z-index:1!important;
+  flex:1!important; /* занять всё свободное пространство */
+  max-height:72px!important;
+}
+.dcard.cur  .dcard-img{filter:drop-shadow(0 0 16px rgba(255,190,0,1)) drop-shadow(0 0 6px rgba(255,160,0,.85))!important;}
+.dcard.gcur .dcard-img{filter:drop-shadow(0 0 16px rgba(46,204,113,1)) drop-shadow(0 0 6px rgba(46,204,113,.85))!important;}
+.dcard.done .dcard-img{filter:brightness(0.80) drop-shadow(0 0 5px rgba(46,180,90,.5))!important;}
+.dcard-img img{width:100%!important;height:100%!important;object-fit:contain!important;display:block!important;border-radius:0!important;background:transparent!important;}
+.dcard-fb{font-size:38px!important;line-height:1;}
+
+/* Оверлей галочка/замок */
+.dcard-ov{
+  position:absolute!important;bottom:24px!important;right:2px!important;
+  width:16px!important;height:16px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  z-index:3!important;background:none!important;border:none!important;
+}
+.dcard-ov img{width:13px!important;height:13px!important;object-fit:contain!important;}
+.dcard.done .dcard-ov img{filter:drop-shadow(0 0 5px rgba(46,220,100,1))!important;}
+.dcard:not(.done) .dcard-ov img{filter:brightness(0.7) drop-shadow(0 1px 3px rgba(0,0,0,.8))!important;}
+.dcard-ov span{font-size:9px!important;}
+
+/* Количество */
+.dcard-amt{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  gap:2px!important;font-size:10px!important;font-weight:900!important;
+  color:rgba(255,255,255,0.80)!important;line-height:1!important;z-index:1!important;
+  flex-shrink:0!important;
+}
+.dcard.cur  .dcard-amt{font-size:13px!important;color:#f5c518!important;text-shadow:0 0 8px rgba(255,200,0,.95);}
+.dcard.gcur .dcard-amt{font-size:13px!important;color:#2ecc71!important;text-shadow:0 0 8px rgba(46,204,113,.95);}
+.dcard.done .dcard-amt{font-size:9px!important;color:rgba(160,220,160,0.55)!important;}
+.dcard-amt img{width:9px!important;height:9px!important;object-fit:contain!important;}
+.dcard.cur .dcard-amt img,.dcard.gcur .dcard-amt img{width:12px!important;height:12px!important;}
+
+/* ═══ ЗАГОЛОВОК ДЕНЬ ═══ */
+#dDayTitle{
+  text-align:center!important;font-size:19px!important;font-weight:900!important;
+  color:#f5c518!important;
+  text-shadow:0 0 20px rgba(255,200,0,1),0 0 45px rgba(255,175,0,.5)!important;
+  letter-spacing:2px!important;line-height:1.1!important;
+  padding:2px 0!important;flex-shrink:0!important;
+  font-family:'Grinched',cursive!important;
+}
+#dDayTitle.green{color:#2ecc71!important;text-shadow:0 0 20px rgba(46,204,113,1),0 0 45px rgba(46,204,113,.5)!important;}
+
+/* ═══ ХИНТ ═══ */
+#dLevelUpHint{text-align:center!important;font-size:9px!important;color:rgba(255,255,255,0.40)!important;padding:1px 0!important;flex-shrink:0!important;}
+#dLevelUpHint b{color:#f5c518;font-weight:800;}
+#dLevelUpHint.green b{color:#2ecc71;}
+
+/* ═══ ВКЛАДКИ ═══ */
+#dTabsRow{
+  display:flex;margin:0 10px;
+  background:rgba(0,0,0,0.75);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;overflow:hidden;flex-shrink:0;
+}
+.dtab-item{flex:1;text-align:center;padding:6px 4px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+
+/* ═══ БОНУСНЫЙ БЛОК ═══ */
+#dBonusBlock{
+  margin:0 10px!important;flex:1!important;min-height:0!important;
+  position:relative!important;border-radius:12px!important;
+  overflow:hidden!important;background:transparent!important;border:none!important;
+}
+/* Гринч — яркий, чистый, без грязных теней */
+#dGrinchImg{
+  position:absolute!important;bottom:0!important;left:-4px!important;
+  height:100%!important;width:auto!important;max-width:55%!important;
+  object-fit:contain!important;object-position:bottom left!important;
+  filter:brightness(1.18) contrast(1.08) saturate(1.15) drop-shadow(2px 0 10px rgba(0,0,0,0.45))!important;
+  z-index:2!important;pointer-events:none!important;
+  animation:dGrinchFloat 5.5s ease-in-out infinite!important;
+}
+@keyframes dGrinchFloat{
+  0%,100%{transform:translateY(0px);}
+  50%{transform:translateY(-4px);}
+}
+/* Зелёное свечение-аура вокруг Гринча */
+#dGrinchAura{
+  position:absolute!important;bottom:-2%!important;left:-8px!important;
+  width:52%!important;height:102%!important;
+  z-index:1!important;pointer-events:none!important;
+  background:radial-gradient(ellipse 55% 60% at 44% 72%, rgba(46,204,113,0.22) 0%, rgba(46,180,90,0.10) 45%, transparent 72%)!important;
+  animation:dAuraPulse 3.5s ease-in-out infinite!important;
+}
+@keyframes dAuraPulse{
+  0%,100%{opacity:1;transform:scaleY(1);}
+  50%{opacity:0.55;transform:scaleY(1.04);}
+}
+/* Искры вокруг Гринча */
+.dgsp{
+  position:absolute!important;pointer-events:none!important;
+  width:5px!important;height:5px!important;border-radius:50%!important;
+  background:#ffe84d!important;z-index:3!important;
+  animation:dGSparkle 2.2s ease-in-out infinite!important;
+  box-shadow:0 0 5px 2px rgba(255,230,60,0.7)!important;
+}
+.dgsp:nth-child(1){left:28%;top:12%;animation-delay:0s!important;animation-duration:2.0s!important;}
+.dgsp:nth-child(2){left:18%;top:30%;animation-delay:0.5s!important;animation-duration:2.6s!important;width:4px!important;height:4px!important;background:#aaffaa!important;box-shadow:0 0 5px 2px rgba(120,255,120,0.7)!important;}
+.dgsp:nth-child(3){left:38%;top:20%;animation-delay:0.9s!important;animation-duration:1.8s!important;width:3px!important;height:3px!important;}
+.dgsp:nth-child(4){left:12%;top:55%;animation-delay:1.3s!important;animation-duration:2.4s!important;background:#aaffaa!important;box-shadow:0 0 5px 2px rgba(120,255,120,0.7)!important;}
+.dgsp:nth-child(5){left:32%;top:42%;animation-delay:0.3s!important;animation-duration:2.8s!important;width:4px!important;height:4px!important;}
+@keyframes dGSparkle{
+  0%{opacity:0;transform:scale(0.4) translateY(0);}
+  30%{opacity:1;transform:scale(1.2) translateY(-4px);}
+  70%{opacity:0.7;transform:scale(0.9) translateY(-9px);}
+  100%{opacity:0;transform:scale(0.3) translateY(-16px);}
+}
+/* ═══ ЛУЧИ СВЕТА ЗА ГРИНЧЕМ ═══ */
+#dGrinchRays{
+  position:absolute!important;
+  inset:0!important;
+  width:54%!important;
+  z-index:1!important;pointer-events:none!important;
+  overflow:hidden!important;
+}
+#dRayCore{
+  position:absolute!important;
+  top:38%!important;left:52%!important;
+  width:48px!important;height:48px!important;
+  border-radius:50%!important;
+  background:radial-gradient(circle,rgba(255,230,80,0.95) 0%,rgba(255,180,0,0.55) 40%,transparent 72%)!important;
+  transform:translate(-50%,-50%)!important;
+  animation:dRayCorePulse 2.4s ease-in-out infinite!important;
+  filter:blur(3px)!important;
+}
+.dray{
+  position:absolute!important;
+  top:38%!important;left:52%!important;
+  width:200px!important;height:7px!important;
+  border-radius:0 4px 4px 0!important;
+  transform-origin:0% 50%!important;
+  background:linear-gradient(90deg,rgba(255,220,60,0.6) 0%,rgba(255,200,30,0.18) 55%,transparent 100%)!important;
+  animation:dRayPulse 2.4s ease-in-out infinite!important;
+  filter:blur(1.5px)!important;
+}
+.dray:nth-child(1){transform:rotate(-80deg)!important;animation-delay:0s!important;width:170px!important;opacity:0.85!important;}
+.dray:nth-child(2){transform:rotate(-55deg)!important;animation-delay:0.3s!important;width:200px!important;opacity:0.75!important;}
+.dray:nth-child(3){transform:rotate(-30deg)!important;animation-delay:0.15s!important;width:185px!important;opacity:0.9!important;}
+.dray:nth-child(4){transform:rotate(-8deg)!important;animation-delay:0.45s!important;width:195px!important;opacity:0.7!important;}
+.dray:nth-child(5){transform:rotate(15deg)!important;animation-delay:0.6s!important;width:180px!important;opacity:0.8!important;}
+.dray:nth-child(6){transform:rotate(38deg)!important;animation-delay:0.2s!important;width:170px!important;opacity:0.65!important;}
+.dray:nth-child(7){transform:rotate(58deg)!important;animation-delay:0.5s!important;width:155px!important;opacity:0.7!important;}
+.dray:nth-child(8){transform:rotate(75deg)!important;animation-delay:0.35s!important;width:140px!important;opacity:0.55!important;}
+@keyframes dRayPulse{
+  0%,100%{opacity:var(--ro,0.7);filter:blur(1.5px);}
+  50%{opacity:calc(var(--ro,0.7)*0.4);filter:blur(2.5px);}
+}
+@keyframes dRayCorePulse{
+  0%,100%{transform:translate(-50%,-50%) scale(1);opacity:1;}
+  50%{transform:translate(-50%,-50%) scale(1.4);opacity:0.6;}
+}
+
+/* Правая зона — сундуки */
+#dChestPanel{
+  position:absolute!important;inset:0!important;
+  display:flex!important;flex-direction:column!important;
+  justify-content:center!important;
+  padding:8px 8px 8px 47%!important;
+  z-index:3!important;gap:8px!important;
+}
+/* Строка сундук */
+.dchest-row{
+  display:flex!important;align-items:center!important;gap:10px!important;
+  width:100%!important;
+  border-radius:12px!important;padding:8px 10px!important;
+  box-sizing:border-box!important;
+}
+.dchest-row.gold-row{
+  border:1.5px solid rgba(220,170,30,0.70)!important;
+  background:linear-gradient(100deg,rgba(60,40,0,0.92),rgba(25,15,0,0.95))!important;
+  box-shadow:0 2px 12px rgba(0,0,0,0.60),inset 0 1px 0 rgba(255,220,80,0.08)!important;
+}
+.dchest-row.green-row{
+  border:1.5px solid rgba(46,204,113,0.60)!important;
+  background:linear-gradient(100deg,rgba(0,45,20,0.92),rgba(0,18,8,0.95))!important;
+  box-shadow:0 2px 12px rgba(0,0,0,0.60),inset 0 1px 0 rgba(80,255,140,0.06)!important;
+}
+/* Сундуки КРУПНЫЕ */
+.dchest-img-wrap{
+  flex-shrink:0!important;
+  width:68px!important;height:68px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+}
+.dchest-img-wrap img{width:100%!important;height:100%!important;object-fit:contain!important;background:transparent!important;}
+.dchest-img-wrap.gold img{filter:drop-shadow(0 0 14px rgba(255,195,0,1)) drop-shadow(0 0 6px rgba(255,160,0,.95))!important;}
+.dchest-img-wrap.green img{filter:drop-shadow(0 0 14px rgba(46,204,113,1)) drop-shadow(0 0 6px rgba(60,240,130,.95))!important;}
+.dchest-text{flex:1!important;}
+.dchest-days{font-size:10px!important;color:rgba(255,255,255,0.58)!important;font-weight:700!important;line-height:1.3!important;}
+.dchest-label{font-size:13px!important;font-weight:900!important;line-height:1.2!important;}
+.dchest-label.gold{color:#f5c518!important;text-shadow:0 0 10px rgba(255,200,0,.80)!important;}
+.dchest-label.green{color:#2ecc71!important;text-shadow:0 0 10px rgba(46,204,113,.80)!important;}
+
+/* Убираем лишний текст "Подарки" / "GRINCH" который лезет из components.css */
+.dcard-amt::after,
+.dcard-amt::before,
+.dcard::after,
+.dcard::before { content:none!important; display:none!important; }
+/* Скрываем любой sub-label который внешний CSS может добавлять под карточку */
+.dcard .dcard-sub,
+.dcard-sub { display:none!important; }
+
+/* ═══ ТАЙМЕР ═══ */
+#dTimerWrap{
+  margin:0 8px!important;flex-shrink:0!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  gap:4px!important;
+  max-height:75px!important;overflow:visible!important;
+  padding-top:6px!important;
+}
+.dtimer-side{
+  flex-shrink:0!important;width:36px!important;height:24px!important;
+  filter:drop-shadow(0 0 4px rgba(255,210,0,0.8))!important;
+}
+.dtimer-side svg{width:100%!important;height:100%!important;display:block!important;}
+#dTimerBox{
+  flex:1!important;text-align:center!important;
+  background:transparent!important;
+  border:none!important;
+  border-radius:0!important;
+  padding:4px 8px 3px!important;
+  box-shadow:none!important;
+}
+#dTimerMain{
+  font-size:clamp(18px,5.5vw,24px)!important;font-weight:900!important;
+  color:#fff!important;letter-spacing:2px!important;
+  line-height:1.3!important;
+  text-shadow:0 0 22px rgba(255,210,0,0.95),0 0 50px rgba(255,170,0,0.45),0 2px 4px rgba(0,0,0,0.95)!important;
+  font-family:'Grinched',cursive!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;
+  white-space:nowrap;overflow:visible;max-width:100%;
+}
+#dTimerMain.ready-state{
+  font-size:clamp(11px,3.5vw,14px)!important;
+  color:#ffe84d!important;
+  letter-spacing:1px!important;
+  text-shadow:0 0 8px rgba(255,220,0,1),0 0 20px rgba(255,180,0,0.9),0 0 40px rgba(255,140,0,0.6)!important;
+  display:block!important;
+  animation:dTimerReady 1.2s ease-in-out infinite alternate;
+}
+#dTimerMain #dTimerVal2{
+  font-size:28px!important;font-weight:900!important;
+  color:#fff!important;letter-spacing:2px!important;
+  text-shadow:0 0 22px rgba(255,210,0,0.95),0 0 50px rgba(255,170,0,0.45)!important;
+  font-family:'Grinched',cursive!important;
+}
+#dStreakTxt2{
+  font-size:10px!important;color:rgba(255,210,100,0.82)!important;
+  letter-spacing:2px!important;font-weight:700!important;
+  margin-top:1px!important;text-align:center!important;
+  text-shadow:0 0 8px rgba(255,180,0,0.4)!important;
+}
+
+/* ═══ ЧАСТИЦЫ ═══ */
+.dfl{position:fixed;pointer-events:none;z-index:99999;font-size:28px;font-weight:900;left:50%;top:50%;transform:translate(-50%,-50%);text-shadow:0 0 22px currentColor;animation:dflA 1.8s ease-out forwards;}
+@keyframes dflA{0%{opacity:1;transform:translate(-50%,-50%) scale(.3);}30%{opacity:1;transform:translate(-50%,-80%) scale(1.4);}100%{opacity:0;transform:translate(-50%,-220%) scale(.9);}}
+.dpt{position:fixed;pointer-events:none;z-index:99998;border-radius:50%;animation:dptA linear forwards;}
+@keyframes dptA{to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0);}}
+</style>
+
+<!-- ====== DAILY SCREEN ====== -->
+<div id="s-daily" class="screen">
+
+  <!-- ФОН -->
+  <div style="position:absolute;inset:0;z-index:0;">
+    <img src="assets/img/Image_3995.jpg" style="width:100%;height:100%;object-fit:cover;opacity:0.92;">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,8,0,0.72)0%,rgba(0,4,0,0.10)30%,rgba(0,4,0,0.25)62%,rgba(0,2,0,0.88)100%);"></div>
+  </div>
+
+  <!-- КОНТЕНТ -->
+  <div class="daily-content" style="position:relative;z-index:3;display:flex;flex-direction:column;width:100%;height:100%;box-sizing:border-box;padding:max(6px,env(safe-area-inset-top)) 0 max(4px,env(safe-area-inset-bottom));gap:3px;">
+
+    <!-- ① ШАПКА -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;">
+      <div onclick="show('menu')" style="width:32px;height:32px;background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.12);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;color:#fff;-webkit-tap-highlight-color:transparent;flex-shrink:0;">◀</div>
+      <div style="text-align:center;flex:1;padding:0 6px;">
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:1px;">
+          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(245,197,24,0.6));"></div>
+          <span style="color:#c8960e;font-size:9px;text-shadow:0 0 6px rgba(255,180,0,0.9);">✦</span>
+          <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(245,197,24,0.6),transparent);"></div>
+        </div>
+        <div style="font-size:17px;font-weight:900;color:#f5c518;letter-spacing:2.5px;text-shadow:0 0 22px rgba(255,200,0,1),0 0 50px rgba(255,175,0,0.6),0 2px 4px rgba(0,0,0,0.9);line-height:1.1;font-family:'Grinched',cursive;white-space:nowrap;">ЕЖЕДНЕВНАЯ ДОБЫЧА</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;">
+          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(245,197,24,0.4));"></div>
+          <div style="font-size:8px;color:rgba(255,255,255,0.55);letter-spacing:0.5px;">Не пропусти день — <b style="color:rgba(255,220,100,0.85);">усиливай награду</b></div>
+          <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(245,197,24,0.4),transparent);"></div>
+        </div>
+      </div>
+      <div style="width:32px;flex-shrink:0;"></div>
+    </div>
+
+    <!-- ② ПАНЕЛЬ ИГРОКА -->
+    <div style="display:flex;align-items:center;gap:6px;margin:0 10px;flex-shrink:0;">
+      <div style="width:8px;height:8px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px rgba(46,204,113,0.9);flex-shrink:0;"></div>
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;text-shadow:0 1px 6px rgba(0,0,0,0.9);" id="dPlayerNick2">Игрок</div>
+        <div style="font-size:8px;color:rgba(255,255,255,0.42);letter-spacing:1px;font-weight:700;" id="dPlayerLvl2">УРОВЕНЬ 1</div>
+      </div>
+    </div>
+
+    <!-- ③ ТАЙМЕР -->
+    <div id="dTimerWrap">
+      <div id="dTimerBox">
+        <div id="dTimerMain"><span id="dTimerVal2">--:--:--</span></div>
+        <div id="dStreakTxt2">◆ СЕРИЯ: 0 дней ◆</div>
+      </div>
+    </div>
+
+    <!-- ④ ДЕНЬ -->
+    <div id="dDayTitle" style="flex-shrink:0;"></div>
+
+    <!-- ⑤ КАРТОЧКИ — все одинаковой высоты, без выступов -->
+    <div id="dCardsTrack" style="flex-shrink:0;"></div>
+
+    <!-- ⑥ ХИНТ -->
+    <div id="dLevelUpHint" style="flex-shrink:0;"></div>
+
+    <!-- ⑦ ВКЛАДКИ -->
+    <div id="dTabsRow">
+      <div id="dTab2_0" class="dtab-item" onclick="dTab2Switch(0)" style="border-right:1px solid rgba(255,255,255,0.07);background:rgba(241,196,15,0.15);">
+        <div class="dtab-name" style="font-size:10px;font-weight:900;color:#f5c518;letter-spacing:0.5px;line-height:1.2;">ПОДАРКИ</div>
+        <div class="dtab-sub" style="font-size:7px;font-weight:700;color:rgba(241,196,15,0.6);">1 – 7</div>
+      </div>
+      <div id="dTab2_1" class="dtab-item" onclick="dTab2Switch(1)" style="background:transparent;">
+        <div class="dtab-name" style="font-size:10px;font-weight:900;color:rgba(255,255,255,0.30);">GRINCH TOKENS</div>
+        <div class="dtab-sub" style="font-size:7px;font-weight:700;color:rgba(255,255,255,0.18);">8 – 30</div>
+      </div>
+    </div>
+
+    <!-- ⑧ БОНУСНЫЙ БЛОК: Гринч слева + 2 строки сундуков справа -->
+    <div id="dBonusBlock">
+      <!-- Лучи света за Гринчем -->
+      <div id="dGrinchRays" aria-hidden="true">
+        <div class="dray"></div><div class="dray"></div><div class="dray"></div>
+        <div class="dray"></div><div class="dray"></div><div class="dray"></div>
+        <div class="dray"></div><div class="dray"></div>
+        <div id="dRayCore"></div>
+      </div>
+      <div id="dGrinchAura"></div>
+      <div id="dGrinchSparkles" aria-hidden="true">
+        <div class="dgsp"></div><div class="dgsp"></div><div class="dgsp"></div>
+        <div class="dgsp"></div><div class="dgsp"></div>
+      </div>
+      <img id="dGrinchImg" src="assets/img/Image_3994.jpg" onerror="this.style.display='none'">
+      <div id="dChestPanel">
+        <div class="dchest-row gold-row">
+          <div class="dchest-img-wrap gold">
+            <img src="assets/img/Image_3990.jpg" onerror="this.outerHTML='<span style=font-size:38px>🏆</span>'">
+          </div>
+          <div class="dchest-text">
+            <div class="dchest-days">7 дней подряд</div>
+            <div class="dchest-label gold">супер сундук</div>
+          </div>
+        </div>
+        <div class="dchest-row green-row">
+          <div class="dchest-img-wrap green">
+            <img src="assets/img/Image_3989.jpg" onerror="this.outerHTML='<span style=font-size:38px>🎀</span>'">
+          </div>
+          <div class="dchest-text">
+            <div class="dchest-days">30 дней подряд</div>
+            <div class="dchest-label green">легендарная награда</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑨ КНОПКА -->
+    <div style="margin:-16px 16px 0;padding-bottom:max(4px,env(safe-area-inset-bottom));flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;">
+      <img id="dClaimBtn2" src="assets/img/Image_3985.jpg"
+        onclick="claimDaily()"
+        style="width:100%;max-height:68px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:14px;display:block;"
+        onerror="this.outerHTML='<button onclick=claimDaily() style=width:100%;padding:14px;border:none;border-radius:14px;font-size:17px;font-weight:900;color:#fff;cursor:pointer;background:linear-gradient(160deg,#d32f2f,#b71c1c);letter-spacing:2px;font-family:Grinched,cursive;>🎁 ЗАБРАТЬ НАГРАДУ</button>'">
+      <div id="dClaimLbl" style="text-align:center;font-size:12px;font-weight:700;color:rgba(255,255,255,0.38);letter-spacing:0.3px;min-height:16px;width:100%;"></div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+<script>
+// Overrides daily2.js dUpdBtn2 — this script tag is after daily2.js so wins
+function dUpdBtn2(){
+  var btn=document.getElementById('dClaimBtn2');
+  if(!btn)return;
+  var can=dCanClaim();
+  var timerBox=document.getElementById('dTimerBox');
+  var timerMain=document.getElementById('dTimerMain');
+
+  if(can){
+    if(timerBox) timerBox.style.cssText='flex:1;min-width:0;text-align:center;background:linear-gradient(135deg,rgba(25,12,0,0.93),rgba(12,6,0,0.96));border:1.5px solid #c8960e;border-radius:12px;padding:6px 8px;overflow:hidden;';
+    if(timerMain){
+      timerMain.className='ready-state';
+      timerMain.removeAttribute('style');
+      timerMain.innerHTML='❖ ПОРА ЗАБРАТЬ НАГРАДУ ❖<span id="dTimerVal2" style="display:none"></span>';
+    }
+  } else {
+    if(timerBox) timerBox.style.cssText='flex:1;text-align:center;background:transparent;border:none;padding:4px 8px 3px;box-shadow:none;';
+    if(timerMain){
+      timerMain.className='';
+      timerMain.removeAttribute('style');
+      timerMain.innerHTML='<span id="dTimerVal2">'+dHMS(dMsLeft())+'</span>';
+    }
+  }
+
+  if(btn.tagName==='IMG'){
+    btn.style.opacity=can?'1':'0.5';
+    btn.style.cursor=can?'pointer':'default';
+    btn.style.pointerEvents=can?'auto':'none';
+  }
+  var lbl=document.getElementById('dClaimLbl');
+  if(lbl) lbl.textContent=can?'':('✓ Получено — '+dHMS(dMsLeft()));
+}
+
+// Override renderDaily — fix tab switching after completing day 7+
+function renderDaily(){
+  if(typeof dCSS==='function') dCSS();
+  var st=dGet(), streak=st.streak;
+  var nick=(window.S&&S.nick)||localStorage.getItem('nick')||'Игрок';
+  var gifts=window.S?S.gifts:parseInt(localStorage.getItem('gifts')||'0',10);
+  var lvl=(typeof getLevel==='function')?getLevel(gifts):1;
+  function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
+  set('dPlayerNick2',nick);
+  set('dPlayerLvl2','УРОВЕНЬ '+lvl);
+  set('dTimerVal2',dHMS(dMsLeft()));
+  var av=document.getElementById('dAvLetter');
+  if(av)av.textContent=(nick[0]||'И').toUpperCase();
+  var streakEl=document.getElementById('dStreakTxt2');
+  if(streakEl)streakEl.textContent='◆  СЕРИЯ: '+streak+' '+dPlural(streak)+'  ◆';
+  // Tab: show gifts tab for days 1-7, grinch for 8+
+  var can=dCanClaim();
+  var nextDay=streak+(can?1:0);
+  if(nextDay<1)nextDay=1;
+  _dTab=(nextDay>7)?1:0;
+  setTimeout(function(){
+    if(typeof dTab2Switch==='function') dTab2Switch(_dTab);
+    else if(typeof dRenderCards==='function') dRenderCards();
+    dUpdBtn2();
+  },20);
+}
+
+var _rs=document.createElement('style');
+_rs.textContent='@keyframes dTimerReady{0%{opacity:0.85;}100%{opacity:1;text-shadow:0 0 20px rgba(255,220,0,1),0 0 40px rgba(255,150,0,0.6);}}';
+document.head.appendChild(_rs);
+</script>
+</html>

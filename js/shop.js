@@ -194,3 +194,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const first = document.querySelector('.stab');
   if (first) { first.style.background='rgba(46,204,113,0.3)'; first.style.color='#2ecc71'; first.style.boxShadow='inset 0 0 0 1.5px rgba(46,204,113,0.6)'; }
 });
+
+// Рендерим магазин при каждом открытии
+window.addEventListener('load', function(){
+  var _origShow = window.show;
+  window.show = function(name){
+    if(typeof _origShow === 'function') _origShow(name);
+    if(name === 'shop'){
+      setTimeout(function(){
+        if(typeof renderShop === 'function') renderShop(shopTabN || 0);
+      }, 30);
+    }
+  };
+});

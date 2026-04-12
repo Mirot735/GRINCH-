@@ -61,6 +61,22 @@ const GIFT_TYPES=[
   {img:'icegem',  sz:82, fallback:'🧊'},
 ];
 
+const SHOP = {
+  boosts: [
+    {key:"slow",    name:"Замедление",    desc:"Подарки падают медленно 30 сек.", price:50,   color:"#3498db", max:10},
+    {key:"autobet", name:"Автосбор",      desc:"100 подарков/день. 7 дней.",       price:2000, color:"#e67e22", max:1},
+    {key:"hp",      name:"Доп. Жизнь",    desc:"+1 HP в раунде. До 10 шт.",        price:30,   color:"#e74c3c", max:10},
+    {key:"totem",   name:"Тотем",         desc:"Воскрешение после смерти.",        price:500,  color:"#9b59b6", max:3},
+    {key:"magnet",  name:"Магнит",        desc:"20 сек притягивает подарки.",      price:400,  color:"#8e44ad", max:5},
+    {key:"star",    name:"Звёздный хруст",desc:"Двойная награда 15 сек.",          price:200,  color:"#f1c40f", max:10},
+  ],
+  skins: [
+    {key:"lord",   name:"Лорд Гринч",   desc:"Тёмная королевская мантия.", price:1500, color:"#9b59b6"},
+    {key:"knight", name:"Рыцарь Гринч", desc:"Стальные доспехи.",          price:800,  color:"#7f8c8d"},
+    {key:"ronin",  name:"Ронин Гринч",  desc:"Самурайский стиль.",         price:1200, color:"#e74c3c"},
+    {key:"thief",  name:"Вор Гринч",    desc:"Маска и лом.",               price:1000, color:"#2c3e50"},
+  ]
+};
 function renderShop(tab){
   if(tab===2){ renderTonShop(); return; }
   shopTabN=tab;

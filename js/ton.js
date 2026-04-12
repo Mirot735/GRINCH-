@@ -14,22 +14,26 @@ function getTonUI() {
   if (tonUI) return tonUI;
   try {
     tonUI = new TON_CONNECT_UI.TonConnectUI({
-      manifestUrl: 'https://ziroman749.github.io/Jhcxrtzx/tonconnect-manifest.json',
+      manifestUrl: 'https://raw.githubusercontent.com/ton-connect/demo-dapp/master/public/tonconnect-manifest.json',
       buttonRootId: null
     });
     tonUI.onStatusChange(wallet => {
       if (wallet) {
         const addr = wallet.account.address;
-        S.wallet = addr.slice(0,6) + '...' + addr.slice(-4);
+        S.wallet     = addr.slice(0,6) + '...' + addr.slice(-4);
+        S.walletAddr = addr.slice(0,6) + '...' + addr.slice(-4);
         S.walletFull = addr;
         save();
         toast('✅ Кошелёк подключён!');
-        renderTonShop();
+        if(typeof renderWalletScreen==='function') renderWalletScreen();
+        if(typeof renderTonShop==='function') renderTonShop();
       } else {
-        S.wallet = null;
+        S.wallet     = null;
+        S.walletAddr = null;
         S.walletFull = null;
         save();
-        renderTonShop();
+        if(typeof renderWalletScreen==='function') renderWalletScreen();
+        if(typeof renderTonShop==='function') renderTonShop();
       }
     });
   } catch(e) {
@@ -75,145 +79,21 @@ function showWalletConn(addr) {
     </div>`;
 }
 
-// ── Открыть покупку — СРАЗУ через TON Connect ────────────
-async function openTonDeposit(pkgId) {
+// ── Открыть модал депозита ─────────────────────────────────
+function openTonDeposit(pkgId) {
   selectedPkg = TON_PACKAGES.find(p => p.id === pkgId);
   if (!selectedPkg) return;
-
-  // Если кошелёк не подключён — сначала подключаем
-  if (!S.walletFull) {
-    toast('💎 Сначала подключи кошелёк!');
-    try {
-      if (!window.TON_CONNECT_UI) { toast('Открой в Telegram!'); return; }
-      const ui = getTonUI();
-      await ui.openModal();
-      // После подключения — повторно вызываем покупку
-      const check = setInterval(() => {
-        if (S.walletFull) {
-          clearInterval(check);
-          openTonDeposit(pkgId);
-        }
-      }, 500);
-      setTimeout(() => clearInterval(check), 30000);
-    } catch(e) { toast('Ошибка подключения'); }
-    return;
-  }
-
-  // Кошелёк подключён — сразу отправляем транзакцию
-  await sendTonPayment(selectedPkg.ton, selectedPkg, PROJECT_WALLET);
-}
-
-// ── Покупка майнера за TON ─────────────────────────────────
-async function openMinerTonPayment(minerId, tonAmount, label) {
-  if (!S.walletFull) {
-    toast('💎 Сначала подключи кошелёк!');
-    try {
-      const ui = getTonUI();
-      await ui.openModal();
-      const check = setInterval(() => {
-        if (S.walletFull) {
-          clearInterval(check);
-          openMinerTonPayment(minerId, tonAmount, label);
-        }
-      }, 500);
-      setTimeout(() => clearInterval(check), 30000);
-    } catch(e) {}
-    return;
-  }
-  // Сохраняем pending майнер
-  localStorage.setItem('pendingMiner', minerId);
-  const fakePkg = { id: minerId, ton: tonAmount, grinch: 0, label };
-  await sendTonPayment(tonAmount, fakePkg, MINING_WALLET);
-}
-
-// ── Универсальная отправка TON транзакции ─────────────────
-async function sendTonPayment(tonAmount, pkg, walletAddress) {
-  const ui = getTonUI();
-  if (!ui || !S.walletFull) { toast('Подключи кошелёк!'); return; }
-
-  // Показываем статус
-  showTxStatusModal('pending', pkg);
-
-  try {
-    const nanoTon = Math.round(tonAmount * 1_000_000_000).toString();
-    const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || S.nick;
-    const comment = 'grinch_' + tgId + '_' + pkg.id;
-    const payload = _buildCommentPayload(comment);
-
-    const tx = {
-      validUntil: Math.floor(Date.now() / 1000) + 600,
-      messages: [{
-        address: walletAddress,
-        amount: nanoTon,
-        payload: payload
-      }]
-    };
-
-    const result = await ui.sendTransaction(tx);
-    showTxStatusModal('success', pkg);
-    setTimeout(() => closeTxStatusModal(), 4000);
-
-  } catch(e) {
-    if (e?.message?.includes('User rejects') || e?.message?.includes('cancel')) {
-      showTxStatusModal('cancelled', pkg);
-    } else {
-      showTxStatusModal('error', pkg);
-    }
-    setTimeout(() => closeTxStatusModal(), 3000);
-  }
-}
-
-// ── Статус модал ──────────────────────────────────────────
-function showTxStatusModal(status, pkg) {
-  let modal = document.getElementById('txStatusModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'txStatusModal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(10px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
-    document.body.appendChild(modal);
-  }
-
-  const contents = {
-    pending: {
-      icon: '⏳',
-      title: 'Открываем Tonkeeper...',
-      sub: 'Подтверди транзакцию в кошельке',
-      color: '#29b6f6'
-    },
-    success: {
-      icon: '✅',
-      title: 'Транзакция отправлена!',
-      sub: pkg.grinch > 0
-        ? 'Зачислим ' + pkg.grinch.toLocaleString() + ' GRINCH в течение 1-2 минут'
-        : 'Майнер будет активирован в течение 1-2 минут',
-      color: '#2ecc71'
-    },
-    cancelled: { icon: '❌', title: 'Отменено', sub: 'Транзакция отменена', color: '#e74c3c' },
-    error:     { icon: '⚠️', title: 'Ошибка', sub: 'Попробуй ещё раз', color: '#e74c3c' }
-  };
-
-  const c = contents[status];
-  modal.innerHTML = `
-    <div style="background:linear-gradient(135deg,#071a14,#0a2018);border:1px solid ${c.color}44;border-radius:24px;padding:28px 22px;width:100%;max-width:320px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;">
-      <div style="font-size:52px;">${c.icon}</div>
-      <div style="font-size:18px;font-weight:900;color:#fff;">${c.title}</div>
-      <div style="font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;">${c.sub}</div>
-      ${status !== 'pending' ? '<button onclick="closeTxStatusModal()" style="width:100%;padding:12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">OK</button>' : ''}
-    </div>`;
-  modal.style.display = 'flex';
-}
-
-function closeTxStatusModal() {
-  const m = document.getElementById('txStatusModal');
-  if (m) m.style.display = 'none';
+  document.getElementById('tonModalAmt').textContent = selectedPkg.ton + ' TON';
+  document.getElementById('tonModalGet').textContent =
+    '= ' + selectedPkg.grinch.toLocaleString() + ' GRINCH' +
+    (selectedPkg.bonus ? ' (' + selectedPkg.bonus + ')' : '');
+  document.getElementById('tonDepositAddr').textContent = PROJECT_WALLET;
+  document.getElementById('tonTxStatus').classList.remove('show');
+  document.getElementById('tonDepositModal').classList.add('show');
 }
 
 function closeTonModal() {
-  const modal = document.getElementById('tonDepositModal');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.classList.remove('show');
-  }
+  document.getElementById('tonDepositModal').classList.remove('show');
   selectedPkg = null;
 }
 
@@ -232,13 +112,63 @@ function copyTonAddr() {
   });
 }
 
-// ── sendTonTransaction — оставляем для совместимости ─────
+// ── Отправить TON через TON Connect ───────────────────────
 async function sendTonTransaction() {
-  if (selectedPkg) await sendTonPayment(selectedPkg.ton, selectedPkg, PROJECT_WALLET);
+  if (!selectedPkg) return;
+
+  const ui = getTonUI();
+  if (!ui || !S.walletFull) {
+    toast('Сначала подключи кошелёк!');
+    return;
+  }
+
+  const status = document.getElementById('tonTxStatus');
+  status.classList.add('show');
+  status.innerHTML = `<div style="font-size:22px;">⏳</div>
+    <div style="font-size:13px;font-weight:700;color:#29b6f6;">Подтверди транзакцию в кошельке...</div>`;
+
+  try {
+    // Сумма в нано-TON (1 TON = 1_000_000_000 нано)
+    const nanoTon = Math.round(selectedPkg.ton * 1_000_000_000).toString();
+
+    // Комментарий = Telegram user_id (бот по нему зачислит баланс)
+    const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || S.nick;
+    // Формат: grinch_<tgId>_buy_<pkgId>
+    // Бот читает комментарий и зачисляет GRINCH + отправляет TON на buyback
+    const comment = `grinch_${tgId}_buy_${selectedPkg.id}`;
+    const payload = _buildCommentPayload(comment);
+
+    const tx = {
+      validUntil: Math.floor(Date.now() / 1000) + 600, // 10 минут
+      messages: [{
+        address: PROJECT_WALLET,
+        amount: nanoTon,
+        payload: payload
+      }]
+    };
+
+    const result = await ui.sendTransaction(tx);
+
+    // Транзакция подписана — ждём подтверждения бота
+    status.innerHTML = `<div style="font-size:22px;">✅</div>
+      <div style="font-size:14px;font-weight:800;color:#2ecc71;">Транзакция отправлена!</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px;">Бот проверит поступление и зачислит<br><b style="color:#f1c40f">${selectedPkg.grinch.toLocaleString()} GRINCH</b> в течение 1-2 минут</div>`;
+
+    // Бот сам увидит транзакцию через мониторинг и зачислит GRINCH
+    setTimeout(() => closeTonModal(), 4000);
+
+  } catch(e) {
+    if (e?.message?.includes('User rejects')) {
+      status.innerHTML = `<div style="font-size:22px;">❌</div>
+        <div style="font-size:13px;color:#e74c3c;">Транзакция отменена</div>`;
+    } else {
+      status.innerHTML = `<div style="font-size:22px;">⚠️</div>
+        <div style="font-size:13px;color:#e74c3c;">Ошибка. Попробуй вручную.</div>`;
+    }
+    setTimeout(() => status.classList.remove('show'), 3000);
+  }
 }
 
-// Кошелёк майнинга — откуда выплачиваются GRINCH токены майнерам
-const MINING_WALLET = 'UQAJg4rCfyhsIlykjAYG9Wr5tSzQjdTssoZkafROmpUlDB1U';
 // _notifyBot удалён — бот сам мониторит транзакции через TonCenter API
 
 // ── Encode text comment as TON cell payload (base64) ──────

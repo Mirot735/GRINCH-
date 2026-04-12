@@ -75,34 +75,7 @@ function startGameWithEnergy() {
   show('game'); startGame();
 }
 
-// ========== ЕЖЕДНЕВНАЯ НАГРАДА ==========
-const DAILY_REWARDS = [20, 30, 50, 75, 100, 150, 300];
-function getDailyState() {
-  return { lastClaim: +localStorage.getItem('dailyLast')||0, streak: +localStorage.getItem('dailyStreak')||0 };
-}
-function canClaimDaily() { return Date.now() >= getDailyState().lastClaim + 24*60*60*1000; }
-function updateDailyTimer() {
-  const el = document.getElementById('dailyTimer'); if (!el) return;
-  const { lastClaim } = getDailyState();
-  const next = lastClaim + 24*60*60*1000, now = Date.now();
-  if (now >= next) { el.textContent = '✅ Забрать!'; el.style.color = '#2ecc71'; }
-  else {
-    const diff = next - now;
-    const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000);
-    el.textContent = h + 'ч ' + String(m).padStart(2,'0') + 'м';
-    el.style.color = 'rgba(255,255,255,0.5)';
-  }
-}
-function openDailyReward() {
-  if (!canClaimDaily()) { updateDailyTimer(); toast('⏳ ' + document.getElementById('dailyTimer').textContent); return; }
-  const { streak } = getDailyState();
-  const day = streak % DAILY_REWARDS.length, reward = DAILY_REWARDS[day];
-  if (typeof S !== 'undefined') { S.gifts += reward; S.seasonBank += reward; if(typeof save==='function')save(); if(typeof updateMenu==='function')updateMenu(); }
-  localStorage.setItem('dailyLast', Date.now());
-  localStorage.setItem('dailyStreak', streak + 1);
-  updateDailyTimer();
-  toast('🎁 День ' + (day+1) + '! +' + reward + ' подарков!', 3000);
-}
+// ========== ЕЖЕДНЕВНАЯ НАГРАДА — логика перенесена в daily.js ==========
 
 // ========== ТАЙМЕР СОБЫТИЙ ==========
 function updateEventTimer() {
@@ -114,10 +87,15 @@ function updateEventTimer() {
   el.textContent = Math.floor(diff/86400000) + 'д ' + Math.floor((diff%86400000)/3600000) + 'ч';
 }
 
-setInterval(() => { updateEnergyUI(); updateDailyTimer(); updateEventTimer();
+setInterval(() => { updateEnergyUI(); if(typeof dailyUpdMenuTile==='function')dailyUpdMenuTile(); updateEventTimer();
   if(document.getElementById('energyModal')?.classList.contains('show')) updateEnergyModalContent();
 }, 15000);
 
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => { updateEnergyUI(); updateDailyTimer(); updateEventTimer(); }, 600);
+  setTimeout(() => { updateEnergyUI(); if(typeof dailyUpdMenuTile==='function')dailyUpdMenuTile(); updateEventTimer(); }, 600);
 });
+
+// Алиас для совместимости с init.js
+function updateDailyTimer() {
+  if (typeof dailyUpdMenuTile === 'function') dailyUpdMenuTile();
+}
