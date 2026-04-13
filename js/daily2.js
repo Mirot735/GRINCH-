@@ -382,11 +382,24 @@ function claimDaily(){
   function _refreshUI(){
     var g  = parseInt(localStorage.getItem('gifts')||'0',10);
     var gr = parseInt(localStorage.getItem('grinch')||'0',10);
+    var gb = parseInt(localStorage.getItem('seasonBank')||'0',10);
+
+    // Обновляем S в памяти
+    if(window.S){
+      S.gifts = g;
+      S.grinch = gr;
+      S.seasonBank = gb;
+    }
+
+    // Обновляем все элементы UI напрямую
     ['menuGifts','shopGifts','pGifts','dBalGifts2'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.textContent=g.toLocaleString();
     });
     ['menuGrinch','shopGrinch','pGrinch','dBalGrinch2'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.textContent=gr.toLocaleString();
+    });
+    ['menuSeasonBank','profileSeasonBank'].forEach(function(id){
+      var el=document.getElementById(id);if(el)el.textContent=gb.toLocaleString();
     });
     try{if(typeof updateMenu==='function')updateMenu();}catch(e){}
     try{if(typeof updateMenuTopbar==='function')updateMenuTopbar();}catch(e){}
