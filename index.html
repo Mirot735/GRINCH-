@@ -1998,11 +1998,12 @@ function dUpdBtn2(){
     }
   }
 
-  if(btn.tagName==='IMG'){
-    btn.style.opacity=can?'1':'0.5';
-    btn.style.cursor=can?'pointer':'default';
-    btn.style.pointerEvents=can?'auto':'none';
-  }
+  // Работает и для IMG и для BUTTON
+  btn.style.opacity=can?'1':'0.5';
+  btn.style.cursor=can?'pointer':'default';
+  btn.style.pointerEvents=can?'auto':'none';
+  if(btn.tagName==='BUTTON') btn.disabled=!can;
+
   var lbl=document.getElementById('dClaimLbl');
   if(lbl) lbl.textContent=can?'':('✓ Получено — '+dHMS(dMsLeft()));
 }

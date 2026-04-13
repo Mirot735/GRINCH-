@@ -22,6 +22,14 @@ const S = {
 };
 
 function save() {
+  // Фикс: берём максимальное значение — защита от перезаписи нового баланса старым
+  var lsGifts  = parseInt(localStorage.getItem('gifts')||'0', 10);
+  var lsGrinch = parseInt(localStorage.getItem('grinch')||'0', 10);
+  var lsBank   = parseInt(localStorage.getItem('seasonBank')||'0', 10);
+  if(lsGifts  > (S.gifts||0))  S.gifts  = lsGifts;
+  if(lsGrinch > (S.grinch||0)) S.grinch = lsGrinch;
+  if(lsBank   > (S.seasonBank||0)) S.seasonBank = lsBank;
+
   Object.keys(S).forEach(k => {
     if(typeof S[k]==='object') localStorage.setItem(k,JSON.stringify(S[k]));
     else localStorage.setItem(k, S[k] === null ? '' : S[k]);
