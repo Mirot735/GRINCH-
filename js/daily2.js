@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-// GRINCH GAME — daily2.js v21
+// GRINCH GAME — daily2.js v22
 // ═══════════════════════════════════════════════════════
 
 var D_COOLDOWN = 20 * 3600 * 1000;
@@ -51,18 +51,15 @@ var IMG = {
 
 // ── STATE ─────────────────────────────────────────────
 function dGet() {
-  // Приоритет: gd2 → S.daily → default
   try {
     var r=localStorage.getItem('gd2');
     if(r) return JSON.parse(r);
-    // Fallback: если S.daily уже есть (state.js загрузил из 'daily')
     if(window.S && S.daily && S.daily.lastClaim) return S.daily;
   } catch(e) {}
   return {streak:0,lastClaim:0};
 }
 function dSet(st) {
   localStorage.setItem('gd2',JSON.stringify(st));
-  // Синхронизируем с S.daily и вызываем save() из state.js
   if(window.S){
     S.daily = st;
     if(typeof save==='function') save();
@@ -84,7 +81,6 @@ function dPlural(n){
 
 // ── CSS карточек ───────────────────────────────────────
 function dCSS() {
-  // CSS теперь в index.html — только чистим старые теги
   ['d_css_v14','d_css_v15','d_css_v16','d_css_v17','d_css_v18','d_css_v19','d_css_v20','d_css_v21'].forEach(function(id){
     var old=document.getElementById(id);if(old)old.remove();
   });
@@ -130,7 +126,6 @@ function dRenderCards(){
   if(curDay<1)curDay=1;
   var rng=_dTab===0?{s:1,e:7}:{s:8,e:30};
 
-  // Show ALL days in the range (scrollable)
   var days=[];
   for(var d=rng.s;d<=rng.e;d++)days.push(d);
 
@@ -154,25 +149,22 @@ function dRenderCards(){
     card.className=cls;
     if(isCur)card.id='dCardCurrent';
 
-    // День
     var dl=document.createElement('div');
     dl.className='dcard-day';
     dl.textContent='День '+num;
     card.appendChild(dl);
 
-    // Картинка
     var wrap=document.createElement('div');
     wrap.className='dcard-img';
     var src,fb;
     if(r.type==='mega')      {src=IMG.chest30; fb='🎀';}
-    else if(num===7)         {src=IMG.chest7;  fb='🏆';}  // День 7 — сундук!
+    else if(num===7)         {src=IMG.chest7;  fb='🏆';}
     else if(isG)             {src=IMG.token;   fb='🟢';}
     else if(isDone)          {src=IMG.giftGold;fb='🎁';}
     else if(isCur)           {src=IMG.giftGrn; fb='🎁';}
     else                     {src=IMG.giftB;   fb='🎁';}
     wrap.appendChild(dMkImg(src,fb));
 
-    // Оверлей
     if(isDone){
       var ov=document.createElement('div');ov.className='dcard-ov';
       ov.appendChild(dMkImg(IMG.check,'✓'));wrap.appendChild(ov);
@@ -182,7 +174,6 @@ function dRenderCards(){
     }
     card.appendChild(wrap);
 
-    // Количество
     var amt=document.createElement('div');
     amt.className='dcard-amt';
     if(r.type==='mega'){
@@ -214,32 +205,19 @@ function dRenderCards(){
     track.appendChild(card);
   });
 
-  // Scroll current card into view (left-aligned)
+  // Scroll current card into view
   setTimeout(function(){
     var cur=document.getElementById('dCardCurrent');
     if(cur&&track){
-      var offset=cur.offsetLeft-track.offsetLeft-8;
-      track.scrollLeft=Math.max(0,offset);
+      var tl=track.getBoundingClientRect().left;
+      var cl=cur.getBoundingClientRect().left;
+      track.parentNode.scrollLeft+=cl-tl-8;
     }
   },50);
-
-  // Заголовок
-  var titleEl=document.getElementById('dDayTitle');
-  if(titleEl){
-    titleEl.textContent='День '+curDay;
-    titleEl.className=curDay>7?'green':'';
-  }
-
-  // Хинт
-  var hint=document.getElementById('dLevelUpHint');
-  if(hint){
-    hint.className=curDay>7?'green':'';
-    hint.innerHTML='✦ Ты переходишь на <b>уровень выше</b> ✦';
-  }
 }
 
-// ── RENDER SCREEN ─────────────────────────────────────
-function renderDaily(){
+// ── OPEN DAILY SCREEN ─────────────────────────────────
+function openDaily2(){
   dCSS();
   var st=dGet(),streak=st.streak;
   var nick=(window.S&&S.nick)||'Игрок';
@@ -254,10 +232,8 @@ function renderDaily(){
 
   var curDay2=dCanClaim()?(streak+1):streak;
   if(curDay2<1)curDay2=1;
-  // Auto switch: если текущий день > 7 — показываем токены
   _dTab=(curDay2>7)?1:0;
 
-  // Reset timer mode so it re-renders correctly
   var tm=document.getElementById('dTimerMain');
   if(tm) tm.removeAttribute('data-mode');
 
@@ -274,7 +250,6 @@ function dUpdBtn2(){
   var can=dCanClaim();
   var lbl=document.getElementById('dClaimLbl');
 
-  // Image button
   if(btn.tagName==='IMG'){
     btn.style.opacity=can?'1':'0.5';
     btn.style.cursor=can?'pointer':'default';
@@ -298,7 +273,6 @@ function dUpdBtn2(){
     return;
   }
 
-  // Regular button fallback
   btn.disabled=!can;
   if(can){
     btn.innerHTML='🎁 ЗАБРАТЬ НАГРАДУ';
@@ -322,9 +296,9 @@ function claimDaily(){
   st.streak+=1;st.lastClaim=now;
 
   // 1. Сохраняем стрик сразу
-  localStorage.setItem('gd2',JSON.stringify(st));
+  dSet(st);
 
-  // 2. Читаем баланс напрямую из localStorage — не зависим от S
+  // 2. Читаем баланс из localStorage
   var curGifts  = parseInt(localStorage.getItem('gifts')||'0',10);
   var curGrinch = parseInt(localStorage.getItem('grinch')||'0',10);
   var curBank   = parseInt(localStorage.getItem('seasonBank')||'0',10);
@@ -350,7 +324,7 @@ function claimDaily(){
     localStorage.setItem('inv', JSON.stringify(curInv));
   }
 
-  // 3. Синхронизируем с S если он есть
+  // 3. Синхронизируем с S
   if(window.S){
     S.daily=st;
     S.gifts=curGifts;
@@ -384,14 +358,12 @@ function claimDaily(){
     var gr = parseInt(localStorage.getItem('grinch')||'0',10);
     var gb = parseInt(localStorage.getItem('seasonBank')||'0',10);
 
-    // Обновляем S в памяти
     if(window.S){
       S.gifts = g;
       S.grinch = gr;
       S.seasonBank = gb;
     }
 
-    // Обновляем все элементы UI напрямую
     ['menuGifts','shopGifts','pGifts','dBalGifts2'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.textContent=g.toLocaleString();
     });
@@ -405,12 +377,25 @@ function claimDaily(){
     try{if(typeof updateMenuTopbar==='function')updateMenuTopbar();}catch(e){}
   }
 
-  // 6. Закрываем экран через 2 сек
-  setTimeout(_refreshUI, 200);
+  // 6. Сразу обновляем карточки и кнопку — БЕЗ перезагрузки
+  setTimeout(function(){
+    _refreshUI();
+    // Сбрасываем data-mode чтобы таймер перерисовался
+    var tm=document.getElementById('dTimerMain');
+    if(tm) tm.removeAttribute('data-mode');
+    // Обновляем стрик
+    var sk=dGet().streak;
+    var es=document.getElementById('dStreakTxt2');
+    if(es) es.textContent='◆  СЕРИЯ: '+sk+' '+dPlural(sk)+'  ◆';
+    // Перерисовываем карточки и кнопку
+    dRenderCards();
+    dUpdBtn2();
+  }, 300);
+
+  // 7. Закрываем экран через 2 сек
   setTimeout(function(){
     _refreshUI();
     try{if(typeof show==='function')show('menu');}catch(e){
-      // Принудительно переключаем экраны если show() не работает
       document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
       var m=document.getElementById('s-menu');
       if(m)m.classList.add('active');
@@ -432,7 +417,6 @@ setInterval(function(){
   updateDailyTimer();
   var scr=document.getElementById('s-daily');
   if(!scr||!scr.classList.contains('active'))return;
-  // Only update timer text if reward not yet claimable
   if(!dCanClaim()){
     var e=document.getElementById('dTimerVal2');
     if(e)e.textContent=dHMS(dMsLeft());
