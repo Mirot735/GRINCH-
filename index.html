@@ -35,7 +35,7 @@
 <style>
 @keyframes trophyGlow{0%,100%{box-shadow:0 0 10px rgba(241,196,15,.4),0 0 20px rgba(241,196,15,.1);}50%{box-shadow:0 0 18px rgba(241,196,15,.7),0 0 35px rgba(241,196,15,.3);}}
 @keyframes btnPulse{0%,100%{box-shadow:0 8px 28px rgba(241,196,15,.45),0 2px 8px rgba(231,76,60,.3);}50%{box-shadow:0 10px 36px rgba(241,196,15,.7),0 4px 16px rgba(231,76,60,.5);}}
-#s-pvp-boss.active, #s-pvp-battle.active { display:flex !important; flex-direction:column !important; }
+#s-pvp-boss.active, #s-pvp-battle.active { display:flex !important; flex-direction:column !important; width:100% !important; height:100% !important; position:fixed !important; top:0; left:0; overflow:hidden; }
 .pvp-wpn-btn { font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:700; border-radius:4px; cursor:pointer; padding:8px 6px; border:1px solid rgba(0,255,136,0.2); background:rgba(0,255,136,0.05); color:rgba(0,255,136,0.5); flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; -webkit-tap-highlight-color:transparent; transition:all .15s; }
 .pvp-wpn-btn.active { border-color:#00ff88; background:rgba(0,255,136,0.15); color:#00ff88; box-shadow:0 0 8px rgba(0,255,136,0.3); }
 .pvp-btn { font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:700; letter-spacing:2px; border:none; border-radius:4px; cursor:pointer; padding:12px 20px; -webkit-tap-highlight-color:transparent; }
