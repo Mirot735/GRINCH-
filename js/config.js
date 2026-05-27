@@ -211,36 +211,7 @@ function updateProfile() {
   if (S.wallet) showWalletConn(S.wallet);
 }
 // ===== WALLET =====
-const FAKE_PLAYERS=[
-  'CryptoGrinch','TonHunter','GiftMaster','GreenDemon','SantaKiller',
-  'FrostBite','XmasRekt','TonBoy','GrinchKing','WhovillePlayer',
-  'DarkElf','GiftSniper','NightGrinch','StarCatcher','MoonWalker',
-  'IceDragon','SnowHunter','GiftBandit','TonWhale','XmasGhost',
-  'NightOwl','GiftRaider','ColdWave','SnowBall','GiftHunter42',
-  'WinterKing','FrostMage','SnowQueen','GiftLord','TonMaster99',
-  'XmasRaider','IceKnight','GiftWizard','ColdBlood','SnowTiger',
-  'NightRider','TonLegend','GiftPhantom','FrostBlade','SnowWolf',
-  'GiftNinja','CryptoElf','TonWarrior','XmasDevil','IceGiant',
-  'SnowGhost','GiftReaper','WinterWolf','TonGhost','FrostKing50',
-];
-function renderRating(){
-  const list=document.getElementById('ratingList');list.innerHTML='';
-  const players=[...FAKE_PLAYERS.map((n,i)=>({name:n,gifts:Math.floor(5000-i*80-Math.random()*50)}))];
-  // Insert self
-  const myScore=S.gifts;
-  const myIdx=players.findIndex(p=>p.gifts<=myScore);
-  if(myIdx>=0) players.splice(myIdx,0,{name:S.nick,gifts:myScore,isMe:true});
-  else players.push({name:S.nick,gifts:myScore,isMe:true});
-  players.slice(0,50).forEach((p,i)=>{
-    const d=document.createElement('div');
-    d.className='ri'+(p.isMe?' me':'');
-    const pos=i+1;
-    const posStr=pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':('#'+pos);
-    const avatarEmoji=p.isMe?'😈':'🎄';
-    d.innerHTML=`<div class="ri-pos">${posStr}</div><div class="ri-avatar">${avatarEmoji}</div><div class="ri-name">${p.name}${p.isMe?'<span class="ri-you">ТЫ</span>':''}</div><div class="ri-gifts">🎁 ${p.gifts}</div>`;
-    list.appendChild(d);
-  });
-}
+// renderRating — вынесен в js/rating.js
 
 const QUESTS_GAME = [
   {id:'catch10',   icon:'🎁', name:'Первые шаги',        desc:'Поймай 10 подарков',   reward:50,   rewardType:'grinch', goal:10,   progress:()=>S.gifts},

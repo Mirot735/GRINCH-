@@ -6,47 +6,56 @@ var D_COOLDOWN = 20 * 3600 * 1000;
 var D_MAX_GAP  = 48 * 3600 * 1000;
 
 var DAILY_REWARDS = [
-  {day:1,  type:'gifts',  amount:100},
-  {day:2,  type:'gifts',  amount:120},
-  {day:3,  type:'gifts',  amount:150},
-  {day:4,  type:'gifts',  amount:180},
-  {day:5,  type:'gifts',  amount:220},
-  {day:6,  type:'gifts',  amount:260},
-  {day:7,  type:'chest7', amount:1},
-  {day:8,  type:'grinch', amount:10},
-  {day:9,  type:'grinch', amount:12},
-  {day:10, type:'grinch', amount:15},
-  {day:11, type:'grinch', amount:18},
-  {day:12, type:'grinch', amount:22},
-  {day:13, type:'grinch', amount:26},
-  {day:14, type:'grinch', amount:30},
-  {day:15, type:'grinch', amount:35},
-  {day:16, type:'grinch', amount:40},
-  {day:17, type:'grinch', amount:46},
-  {day:18, type:'grinch', amount:52},
-  {day:19, type:'grinch', amount:60},
-  {day:20, type:'grinch', amount:68},
-  {day:21, type:'grinch', amount:78},
-  {day:22, type:'grinch', amount:88},
-  {day:23, type:'grinch', amount:100},
-  {day:24, type:'grinch', amount:115},
-  {day:25, type:'grinch', amount:130},
-  {day:26, type:'grinch', amount:148},
-  {day:27, type:'grinch', amount:165},
-  {day:28, type:'grinch', amount:185},
-  {day:29, type:'grinch', amount:200},
-  {day:30, type:'mega',   amount:1}
+  {day:1,  type:'gifts',  amount:100,  img:'giftR',  label:'Первый шаг'},
+  {day:2,  type:'gifts',  amount:150,  img:'giftR',  label:'Разогрев'},
+  {day:3,  type:'gifts',  amount:200,  img:'giftG',  label:'Войди во вкус'},
+  {day:4,  type:'gifts',  amount:280,  img:'giftG',  label:'Набираем темп'},
+  {day:5,  type:'gifts',  amount:380,  img:'giftAu', label:'Гринч доволен'},
+  {day:6,  type:'gifts',  amount:500,  img:'giftAu', label:'Почти!'},
+  {day:7,  type:'chest7', amount:1,    img:'chest7', label:'СУПЕР-СУНДУК!'},
+  {day:8,  type:'grinch', amount:15,   img:'token',  label:'Токен-старт'},
+  {day:9,  type:'grinch', amount:18,   img:'token',  label:'Ещё больше'},
+  {day:10, type:'gifts',  amount:600,  img:'giftAu', label:'Двойной удар'},
+  {day:11, type:'grinch', amount:25,   img:'token',  label:'GRINCH растёт'},
+  {day:12, type:'gifts',  amount:700,  img:'giftAu', label:'Подарочный дождь'},
+  {day:13, type:'grinch', amount:35,   img:'token',  label:'Серьёзно'},
+  {day:14, type:'gifts',  amount:1000, img:'giftAu', label:'2 НЕДЕЛИ! 🔥'},
+  {day:15, type:'grinch', amount:45,   img:'token',  label:'Полпути'},
+  {day:16, type:'gifts',  amount:1200, img:'giftAu', label:'Снежный шторм'},
+  {day:17, type:'grinch', amount:60,   img:'token',  label:'Токен-буст'},
+  {day:18, type:'gifts',  amount:1500, img:'giftAu', label:'Куча подарков'},
+  {day:19, type:'grinch', amount:78,   img:'token',  label:'Близко к цели'},
+  {day:20, type:'gifts',  amount:2000, img:'giftAu', label:'Богатство!'},
+  {day:21, type:'chest7', amount:1,    img:'chest7', label:'3 НЕДЕЛИ — СУНДУК!'},
+  {day:22, type:'grinch', amount:100,  img:'token',  label:'Сотка!'},
+  {day:23, type:'grinch', amount:120,  img:'token',  label:'Легенда'},
+  {day:24, type:'gifts',  amount:2500, img:'giftAu', label:'Рождество!'},
+  {day:25, type:'grinch', amount:150,  img:'token',  label:'Полтора!'},
+  {day:26, type:'grinch', amount:180,  img:'token',  label:'Финишная!'},
+  {day:27, type:'gifts',  amount:3000, img:'giftAu', label:'Гора подарков'},
+  {day:28, type:'grinch', amount:220,  img:'token',  label:'Почти МЕГА'},
+  {day:29, type:'grinch', amount:260,  img:'token',  label:'Последний шаг'},
+  {day:30, type:'mega',   amount:1,    img:'mega',   label:'МЕГА-БОКС 🎀'},
 ];
 
 var IMG = {
+  giftR:  'assets/img/Image_3993.jpg',
+  giftG:  'assets/img/Image_3991.jpg',
+  giftAu: 'assets/img/Image_3992.jpg',
+  chest7: 'assets/img/Image_3990.jpg',
+  mega:   'assets/img/Image_3989.jpg',
+  token:  'assets/img/Image_3986.jpg',
+  grinch: 'assets/img/Image_3994.jpg',
+  winter: 'assets/img/Image_3980.jpg',
+  scene:  'assets/img/Image_3981.png',
+  xmas:   'assets/img/Image_3995.jpg',
+  lock:   'assets/img/Image_3988.jpg',
+  check:  'assets/img/Image_3987.jpg',
+  // обратная совместимость
   giftB:   'assets/img/Image_3993.jpg',
   giftGold:'assets/img/Image_3992.jpg',
   giftGrn: 'assets/img/Image_3991.jpg',
-  chest7:  'assets/img/Image_3990.jpg',
   chest30: 'assets/img/Image_3989.jpg',
-  lock:    'assets/img/Image_3988.jpg',
-  check:   'assets/img/Image_3987.jpg',
-  token:   'assets/img/Image_3986.jpg'
 };
 
 // ── STATE ─────────────────────────────────────────────
@@ -156,13 +165,9 @@ function dRenderCards(){
 
     var wrap=document.createElement('div');
     wrap.className='dcard-img';
-    var src,fb;
-    if(r.type==='mega')      {src=IMG.chest30; fb='🎀';}
-    else if(num===7)         {src=IMG.chest7;  fb='🏆';}
-    else if(isG)             {src=IMG.token;   fb='🟢';}
-    else if(isDone)          {src=IMG.giftGold;fb='🎁';}
-    else if(isCur)           {src=IMG.giftGrn; fb='🎁';}
-    else                     {src=IMG.giftB;   fb='🎁';}
+    var imgKey = r.img || (r.type==='mega'?'mega':r.type==='chest7'?'chest7':isG?'token':isDone?'giftAu':isCur?'giftG':'giftR');
+    var fb = r.type==='mega'?'🎀':r.type==='chest7'?'🏆':isG?'🟢':'🎁';
+    var src = IMG[imgKey] || IMG.giftR;
     wrap.appendChild(dMkImg(src,fb));
 
     if(isDone){
@@ -201,6 +206,17 @@ function dRenderCards(){
       amt.appendChild(tx2);
     }
     card.appendChild(amt);
+
+    // Лейбл для текущей карточки
+    if(isCur && r.label){
+      var lbl=document.createElement('div');
+      lbl.style.cssText='font-size:7px;color:rgba(0,255,136,0.6);text-align:center;'
+        +'margin-top:2px;line-height:1.2;padding:0 2px;overflow:hidden;'
+        +'text-overflow:ellipsis;white-space:nowrap;max-width:100%;'
+        +'font-family:"IBM Plex Mono",monospace;letter-spacing:0.3px;';
+      lbl.textContent=r.label;
+      card.appendChild(lbl);
+    }
 
     track.appendChild(card);
   });
@@ -290,104 +306,109 @@ function claimDaily(){
     if(typeof toast==='function')toast('⏳ Следующая через '+dHMS(dMsLeft()));
     return;
   }
-  if(st.lastClaim>0&&now-st.lastClaim>D_MAX_GAP)st.streak=0;
-  var idx=st.streak%DAILY_REWARDS.length;
-  var rw=DAILY_REWARDS[idx];
-  st.streak+=1;st.lastClaim=now;
+
+  // Сбрасываем серию если пропустил больше 48ч
+  if(st.lastClaim>0&&now-st.lastClaim>D_MAX_GAP) st.streak=0;
+
+  // Правильный индекс — streak уже равен числу полученных наград
+  var idx = st.streak % DAILY_REWARDS.length;
+  var rw  = DAILY_REWARDS[idx];
+  st.streak += 1;
+  st.lastClaim = now;
 
   // 1. Сохраняем стрик сразу
   dSet(st);
 
-  // 2. Читаем баланс из localStorage
-  var curGifts  = parseInt(localStorage.getItem('gifts')||'0',10);
-  var curGrinch = parseInt(localStorage.getItem('grinch')||'0',10);
-  var curBank   = parseInt(localStorage.getItem('seasonBank')||'0',10);
+  // 2. Читаем свежие данные
+  var curGifts  = (window.S && S.gifts)  || parseInt(localStorage.getItem('gifts')||'0',10);
+  var curGrinch = (window.S && S.grinch) || parseInt(localStorage.getItem('grinch')||'0',10);
+  var curBank   = (window.S && S.seasonBank) || parseInt(localStorage.getItem('seasonBank')||'0',10);
   var curInv    = {};
-  try{ curInv=JSON.parse(localStorage.getItem('inv')||'{}'); }catch(e){}
+  try {
+    curInv = JSON.parse(localStorage.getItem('inv')||'{}');
+    if(window.S && S.inv) curInv = Object.assign({}, S.inv, curInv);
+  } catch(e) {}
 
+  // 3. Начисляем награду
   if(rw.type==='gifts'){
     curGifts += rw.amount;
     curBank  += rw.amount;
-    localStorage.setItem('gifts', curGifts);
-    localStorage.setItem('seasonBank', curBank);
   }
   if(rw.type==='grinch'){
     curGrinch += rw.amount;
-    localStorage.setItem('grinch', curGrinch);
   }
   if(rw.type==='chest7'){
-    curInv.chest7=(curInv.chest7||0)+1;
-    localStorage.setItem('inv', JSON.stringify(curInv));
+    curInv.chest7 = (curInv.chest7||0) + 1;
   }
   if(rw.type==='mega'){
-    curInv.megaBox=(curInv.megaBox||0)+1;
-    localStorage.setItem('inv', JSON.stringify(curInv));
+    curInv.megaBox = (curInv.megaBox||0) + 1;
   }
 
-  // 3. Синхронизируем с S
+  // 4. Сохраняем всё синхронно
+  localStorage.setItem('gifts',     String(curGifts));
+  localStorage.setItem('grinch',    String(curGrinch));
+  localStorage.setItem('seasonBank',String(curBank));
+  localStorage.setItem('inv',       JSON.stringify(curInv));
+
   if(window.S){
-    S.daily=st;
-    S.gifts=curGifts;
-    S.grinch=curGrinch;
-    S.seasonBank=curBank;
-    S.inv=curInv;
-    if(typeof save==='function')try{save();}catch(e){}
+    S.daily      = st;
+    S.gifts      = curGifts;
+    S.grinch     = curGrinch;
+    S.seasonBank = curBank;
+    S.inv        = curInv;
+    if(typeof save==='function') try{save();}catch(e){}
   }
 
-  // 4. Анимация
+  // 5. Анимация
   var cols=['#f1c40f','#2ecc71','#e74c3c','#fff'];
-  var cx=window.innerWidth/2,cy=window.innerHeight*.55;
+  var cx=window.innerWidth/2, cy=window.innerHeight*.55;
   for(var i=0;i<24;i++){
-    var p=document.createElement('div');p.className='dpt';
-    var ang=Math.random()*Math.PI*2,dist=80+Math.random()*150,sz=(4+Math.random()*8).toFixed(0);
+    var p=document.createElement('div'); p.className='dpt';
+    var ang=Math.random()*Math.PI*2, dist=80+Math.random()*150, sz=(4+Math.random()*8).toFixed(0);
     p.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+sz+'px;height:'+sz+'px;background:'+cols[i%4]+';--tx:'+(Math.cos(ang)*dist).toFixed(0)+'px;--ty:'+(-(Math.abs(Math.sin(ang)*dist)+40)).toFixed(0)+'px;animation-duration:'+(0.5+Math.random()*.8).toFixed(2)+'s;';
     document.body.appendChild(p);
     setTimeout((function(e){return function(){if(e.parentNode)e.parentNode.removeChild(e);};})(p),1500);
   }
-  var fl=document.createElement('div');fl.className='dfl';
-  fl.style.color=rw.type==='mega'?'#ff69b4':rw.type==='chest7'?'#f5c518':rw.type==='grinch'?'#2ecc71':'#f1c40f';
-  fl.textContent=rw.type==='mega'?'🎀 МЕГА-БОКС!':rw.type==='chest7'?'🏆 СУПЕР-СУНДУК!':rw.type==='grinch'?'🟢 +'+rw.amount+' GRINCH':'🎁 +'+rw.amount+' подарков';
+
+  var label = rw.type==='mega'    ? '🎀 МЕГА-БОКС!'
+            : rw.type==='chest7'  ? '🏆 СУПЕР-СУНДУК!'
+            : rw.type==='grinch'  ? '🟢 +'+rw.amount+' GRINCH'
+            :                       '🎁 +'+rw.amount+' подарков';
+
+  var fl=document.createElement('div'); fl.className='dfl';
+  fl.style.color = rw.type==='mega'?'#ff69b4':rw.type==='chest7'?'#f5c518':rw.type==='grinch'?'#2ecc71':'#f1c40f';
+  fl.textContent = label;
   document.body.appendChild(fl);
   setTimeout(function(){if(fl.parentNode)fl.parentNode.removeChild(fl);},2000);
-  if(typeof toast==='function')toast(fl.textContent,3000);
+  if(typeof toast==='function') toast(label, 3000);
   _dailyAutoShown=true;
 
-  // 5. Обновляем UI — читаем прямо из localStorage
+  // 6. Обновляем UI
   function _refreshUI(){
-    var g  = parseInt(localStorage.getItem('gifts')||'0',10);
-    var gr = parseInt(localStorage.getItem('grinch')||'0',10);
-    var gb = parseInt(localStorage.getItem('seasonBank')||'0',10);
-
-    if(window.S){
-      S.gifts = g;
-      S.grinch = gr;
-      S.seasonBank = gb;
-    }
+    var g  = window.S ? S.gifts      : parseInt(localStorage.getItem('gifts')||'0',10);
+    var gr = window.S ? S.grinch     : parseInt(localStorage.getItem('grinch')||'0',10);
+    var gb = window.S ? S.seasonBank : parseInt(localStorage.getItem('seasonBank')||'0',10);
 
     ['menuGifts','shopGifts','pGifts','dBalGifts2'].forEach(function(id){
-      var el=document.getElementById(id);if(el)el.textContent=g.toLocaleString();
+      var el=document.getElementById(id); if(el) el.textContent=g.toLocaleString();
     });
     ['menuGrinch','shopGrinch','pGrinch','dBalGrinch2'].forEach(function(id){
-      var el=document.getElementById(id);if(el)el.textContent=gr.toLocaleString();
+      var el=document.getElementById(id); if(el) el.textContent=gr.toLocaleString();
     });
     ['menuSeasonBank','profileSeasonBank'].forEach(function(id){
-      var el=document.getElementById(id);if(el)el.textContent=gb.toLocaleString();
+      var el=document.getElementById(id); if(el) el.textContent=gb.toLocaleString();
     });
     try{if(typeof updateMenu==='function')updateMenu();}catch(e){}
     try{if(typeof updateMenuTopbar==='function')updateMenuTopbar();}catch(e){}
   }
 
-  // 6. Сразу обновляем карточки и кнопку — БЕЗ перезагрузки
   setTimeout(function(){
     _refreshUI();
-    // Сбрасываем data-mode чтобы таймер перерисовался
     var tm=document.getElementById('dTimerMain');
     if(tm) tm.removeAttribute('data-mode');
-    // Обновляем стрик
     var sk=dGet().streak;
     var es=document.getElementById('dStreakTxt2');
     if(es) es.textContent='◆  СЕРИЯ: '+sk+' '+dPlural(sk)+'  ◆';
-    // Перерисовываем карточки и кнопку
     dRenderCards();
     dUpdBtn2();
   }, 300);
@@ -398,7 +419,7 @@ function claimDaily(){
     try{if(typeof show==='function')show('menu');}catch(e){
       document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
       var m=document.getElementById('s-menu');
-      if(m)m.classList.add('active');
+      if(m) m.classList.add('active');
     }
   }, 2000);
 }

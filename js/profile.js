@@ -400,8 +400,7 @@ function renderInventoryScreen() {
    РЕЙТИНГ
 ════════════════════════════════════════════ */
 function renderRating() {
-  var el = document.getElementById('ratingList');
-  if (!el) return;
+  // Только обновляем ранг игрока — экран рейтинга строит rating.js
   var S = window.S||{}, myNick = S.nick||'Игрок', myGifts = S.gifts||0;
   var top = [];
   try { top = JSON.parse(localStorage.getItem('grinch_rating')||'[]'); } catch(e) {}
@@ -419,14 +418,11 @@ function renderRating() {
   if (window.S) window.S.rank = myRank;
   _pEl('menuRank','#'+myRank);
   _pEl('profileSeasonRank','#'+myRank);
-  var M = ['🥇','🥈','🥉'];
-  el.innerHTML = top.map(function(r,i){
-    var me = r.me||r.nick===myNick;
-    return '<div class="ri'+(me?' me':'')+'"><div class="ri-pos">'+(i<3?M[i]:i+1)+'</div>'
-      + '<div class="ri-avatar">'+(r.nick[0]||'?').toUpperCase()+'</div>'
-      + '<div class="ri-name">'+r.nick+(me?'<span class="ri-you"> ты</span>':'')+'</div>'
-      + '<div class="ri-gifts">'+(r.gifts||0).toLocaleString()+' 🎁</div></div>';
-  }).join('');
+  // Если открыт экран рейтинга — запускаем rating.js рендер
+  var ratScreen = document.getElementById('s-rating');
+  if (ratScreen && ratScreen.classList.contains('active') && typeof _ratFetch === 'function') {
+    _ratFetch();
+  }
 }
 
 /* ════════════════════════════════════════════

@@ -35,7 +35,12 @@
 <style>
 @keyframes trophyGlow{0%,100%{box-shadow:0 0 10px rgba(241,196,15,.4),0 0 20px rgba(241,196,15,.1);}50%{box-shadow:0 0 18px rgba(241,196,15,.7),0 0 35px rgba(241,196,15,.3);}}
 @keyframes btnPulse{0%,100%{box-shadow:0 8px 28px rgba(241,196,15,.45),0 2px 8px rgba(231,76,60,.3);}50%{box-shadow:0 10px 36px rgba(241,196,15,.7),0 4px 16px rgba(231,76,60,.5);}}
-@keyframes pvpGlow{0%,100%{box-shadow:0 0 14px rgba(46,204,113,.9),0 0 28px rgba(46,204,113,.5);border-color:#2ecc71;}50%{box-shadow:0 0 22px rgba(46,204,113,1),0 0 44px rgba(46,204,113,.7);border-color:#27ae60;}}
+#s-pvp-boss.active, #s-pvp-battle.active { display:flex !important; flex-direction:column !important; }
+.pvp-wpn-btn { font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:700; border-radius:4px; cursor:pointer; padding:8px 6px; border:1px solid rgba(0,255,136,0.2); background:rgba(0,255,136,0.05); color:rgba(0,255,136,0.5); flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; -webkit-tap-highlight-color:transparent; transition:all .15s; }
+.pvp-wpn-btn.active { border-color:#00ff88; background:rgba(0,255,136,0.15); color:#00ff88; box-shadow:0 0 8px rgba(0,255,136,0.3); }
+.pvp-btn { font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:700; letter-spacing:2px; border:none; border-radius:4px; cursor:pointer; padding:12px 20px; -webkit-tap-highlight-color:transparent; }
+@keyframes pvpShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+#pvpCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;}
 </style>
 <script>
 function show(name){
@@ -276,7 +281,7 @@ function submitTxVerify(){
       <!-- Токен — узкая -->
       <div onclick="show('token')" style="position:relative;border:2px solid rgba(46,204,113,0.6);border-radius:12px;cursor:pointer;overflow:hidden;-webkit-tap-highlight-color:transparent;box-shadow:0 0 10px rgba(46,204,113,0.3);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
         <div style="position:absolute;inset:0;background:linear-gradient(160deg,#051a0d,#020f07);"></div>
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-bottom:20px;font-size:28px;">🟢</div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-bottom:20px;"><img src="assets/img/Image_3974.png" style="width:40px;height:40px;object-fit:contain;" onerror="this.outerHTML='<span style=font-size:28px>🟢</span>'"></div>
         <div style="position:relative;z-index:2;width:100%;background:rgba(0,0,0,0.7);padding:3px 2px;text-align:center;">
           <div style="font-size:5.5px;font-weight:800;color:#fff;letter-spacing:.3px;text-transform:uppercase;">ТОКЕН</div>
           <div style="font-size:7.5px;font-weight:800;color:#2ecc71;">GRINCH</div>
@@ -409,7 +414,22 @@ function submitTxVerify(){
     <div class="pvp-online-count">1,247 игроков</div>
   </div>
   <div class="pvp-content">
-    <div class="pvp-section-title">🎮 Одиночные режимы</div>
+    <div class="pvp-section-title">👹 Одиночные режимы</div>
+
+    <!-- VS BOSS — активный -->
+    <div class="pvp-game-card" onclick="_pvpOpenBossLobby()" style="border:1px solid rgba(107,140,58,0.5);background:rgba(107,140,58,0.06);position:relative;overflow:hidden;">
+      <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(107,140,58,0.7),transparent);"></div>
+      <div class="pvp-game-icon" style="background:linear-gradient(135deg,rgba(107,140,58,0.3),rgba(60,80,20,0.3));font-size:28px;">👹</div>
+      <div class="pvp-game-info">
+        <div class="pvp-game-name" style="color:#6b8c3a;">VS Тролль-Босс</div>
+        <div class="pvp-game-desc">1 на 1. Победи тролля — получи подарки и GRINCH токены!</div>
+        <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+          <span class="pvp-game-badge badge-pvp">1v1</span>
+          <span style="font-size:9px;color:rgba(0,255,136,0.6);font-family:'IBM Plex Mono',monospace;">🎁 +500 &nbsp; 🟢 +30 GRINCH</span>
+        </div>
+      </div>
+    </div>
+
     <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
       <div class="pvp-game-icon" style="background:linear-gradient(135deg,#e74c3c22,#c0392b22);">🎁</div>
       <div class="pvp-game-info">
@@ -444,6 +464,66 @@ function submitTxVerify(){
       </div>
     </div>
   </div>
+</div>
+
+<!-- ====== PVP BOSS LOBBY ====== -->
+<div id="s-pvp-boss" class="screen" style="background:#000;">
+  <div class="page-header" style="flex-shrink:0;border-bottom:1px solid rgba(0,255,136,0.08);">
+    <div class="ph-back" onclick="show('pvp')">◀</div>
+    <div style="text-align:center;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.35);letter-spacing:2px;">// BOSS_BATTLE</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:#00ff88;letter-spacing:2px;text-shadow:0 0 12px rgba(0,255,136,0.7);">VS ТРОЛЛЬ</div>
+    </div>
+    <div class="ph-right"></div>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;padding:12px;">
+    <!-- Карточка босса -->
+    <div style="background:rgba(0,0,0,0.8);border:1px solid rgba(107,140,58,0.4);border-radius:4px;padding:16px;display:flex;gap:14px;align-items:center;margin-bottom:12px;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(107,140,58,0.6),transparent);"></div>
+      <div style="font-size:64px;line-height:1;flex-shrink:0;">👹</div>
+      <div style="flex:1;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(107,140,58,0.6);letter-spacing:2px;">BOSS #01</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;color:#6b8c3a;text-shadow:0 0 12px rgba(107,140,58,0.6);">ТРОЛЛЬ</div>
+        <div style="display:flex;gap:12px;margin-top:6px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,68,68,0.7);">❤️ 300 HP</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,215,0,0.7);">⚔️ 10-20 урон</div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.5);background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:3px;padding:3px 6px;">🎁 +500</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.5);background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:3px;padding:3px 6px;">🟢 +30 GRINCH</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Выбор оружия -->
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.35);letter-spacing:2px;margin-bottom:8px;">// ВЫБОР ОРУЖИЯ</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;" id="bossWeaponSelect">
+      <button class="pvp-wpn-btn active" id="wpnBtn_sword" onclick="_pvpPickWeapon('sword')" style="flex:1;padding:10px 4px;">
+        <div style="font-size:22px;">⚔️</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;">Меч</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.6);">18-28</div>
+      </button>
+      <button class="pvp-wpn-btn" id="wpnBtn_bow" onclick="_pvpPickWeapon('bow')" style="flex:1;padding:10px 4px;">
+        <div style="font-size:22px;">🏹</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;">Лук</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.6);">12-20</div>
+      </button>
+      <button class="pvp-wpn-btn" id="wpnBtn_scythe" onclick="_pvpPickWeapon('scythe')" style="flex:1;padding:10px 4px;">
+        <div style="font-size:22px;">💀</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;">Коса</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.6);">28-42</div>
+      </button>
+    </div>
+
+    <!-- Кнопка старт -->
+    <button onclick="_pvpStartBoss()" style="width:100%;padding:16px;background:linear-gradient(135deg,#00ff88,#00cc6a);border:none;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:900;color:#000;letter-spacing:3px;cursor:pointer;box-shadow:0 4px 20px rgba(0,255,136,0.4);">⚔️ В БОЙ!</button>
+  </div>
+</div>
+
+<!-- ====== PVP BATTLE SCREEN ====== -->
+<div id="s-pvp-battle" class="screen" style="background:#000;">
+  <div id="pvpBattleInner" style="width:100%;height:100%;display:flex;flex-direction:column;"></div>
 </div>
 
 <!-- ====== SHOP ====== -->
@@ -1249,17 +1329,24 @@ function renderWallet(){
 </script>
 
 <!-- ====== RATING ====== -->
-<div id="s-rating" class="screen">
-  <div class="page-header">
+<div id="s-rating" class="screen" style="background:#000;">
+  <div class="page-header" style="flex-shrink:0;">
     <div class="ph-back" onclick="show('menu')">◀</div>
-    <div class="ph-title">🏆 ТОП-50</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:#00ff88;letter-spacing:3px;text-shadow:0 0 14px rgba(0,255,136,0.7);">// ТОП-50</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.35);letter-spacing:3px;">LEADERBOARD</div>
+    </div>
     <div class="ph-right"></div>
   </div>
-  <div class="rating-prize-banner">
-    <div class="rpb-icon">🏆</div>
-    <div class="rpb-text"><strong>Призовой пул: 100 TON</strong> для участников топа в конце сезона. Играй больше — попади в топ!</div>
+  <div style="margin:8px 12px;background:linear-gradient(135deg,rgba(255,215,0,0.08),rgba(255,215,0,0.04));border:1px solid rgba(255,215,0,0.25);border-radius:4px;padding:10px 12px;display:flex;align-items:center;gap:10px;flex-shrink:0;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.5),transparent);"></div>
+    <div style="font-size:22px;flex-shrink:0;">🏆</div>
+    <div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:#ffd700;letter-spacing:1px;">ПРИЗОВОЙ ПУЛ: 100 TON</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.45);margin-top:2px;line-height:1.5;">Для участников топа в конце сезона. Играй больше — попади в топ!</div>
+    </div>
   </div>
-  <div class="rating-list" id="ratingList"></div>
+  <div style="flex:1;overflow-y:auto;padding-bottom:24px;" id="ratingList"></div>
 </div>
 
 <!-- ====== FRIENDS ====== -->
@@ -1494,6 +1581,7 @@ try {
 <script src="js/energy.js"></script>
 <script src="js/events.js"></script>
 <script src="js/token.js?v=2"></script>
+<script src="js/rating.js?v=1"></script>
 <script src="js/daily2.js?v=19"></script>
 
 
@@ -1501,7 +1589,7 @@ try {
 <style>
 #s-daily {
   position:relative!important; overflow:hidden!important;
-  background:#010a01!important; flex-direction:column!important;
+  background:#000!important; flex-direction:column!important;
   height:100svh!important; max-height:100svh!important;
 }
 #s-daily.active{display:flex!important;}
@@ -1509,16 +1597,18 @@ try {
   position:relative;z-index:3;width:100%;flex:1;
   display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;
 }
+@keyframes dailyPulse{0%,100%{box-shadow:0 0 8px rgba(0,255,136,0.9)}50%{box-shadow:0 0 20px rgba(0,255,136,1),0 0 30px rgba(0,255,136,0.4)}}
 
 /* ═══ КАРТОЧКИ ═══ */
 #dCardsTrack{
   display:flex!important;
   flex-direction:row!important;
   gap:6px!important;
-  padding:0 8px!important;
+  padding:4px 8px 6px!important;
   overflow-x:auto!important;
-  overflow-y:visible!important;
+  overflow-y:hidden!important;
   flex-shrink:0!important;
+  min-height:116px!important;
   scroll-snap-type:x mandatory!important;
   -webkit-overflow-scrolling:touch!important;
   scrollbar-width:none!important;
@@ -1532,64 +1622,63 @@ try {
 }
 /* Базовая */
 .dcard{
-  border-radius:10px!important;
+  border-radius:4px!important;
   display:flex!important; flex-direction:column!important;
   align-items:center!important; justify-content:space-between!important;
   padding:5px 2px 5px!important;
   box-sizing:border-box!important;
-  height:110px!important;
+  height:90px!important;
   width:100%!important;
   position:relative!important; flex:none!important;
   overflow:hidden!important;
-  background:linear-gradient(170deg,rgba(12,38,18,0.97),rgba(5,16,8,0.99))!important;
-  border:1.5px solid rgba(180,130,30,0.55)!important;
-  box-shadow:inset 0 1px 0 rgba(255,210,60,0.10),0 2px 10px rgba(0,0,0,0.70),0 0 0 1px rgba(0,0,0,0.3)!important;
-  opacity:0.92!important;
+  background:rgba(0,5,2,0.95)!important;
+  border:1px solid rgba(0,255,136,0.15)!important;
+  box-shadow:inset 0 1px 0 rgba(0,255,136,0.05),0 2px 8px rgba(0,0,0,0.8)!important;
+  opacity:0.85!important;
 }
 .dcard.done{
   opacity:1!important;
-  border-color:rgba(46,180,90,0.50)!important;
-  background:linear-gradient(170deg,rgba(8,32,14,0.97),rgba(3,14,7,0.99))!important;
-  box-shadow:inset 0 1px 0 rgba(80,255,120,0.08),0 2px 10px rgba(0,0,0,0.70)!important;
+  border-color:rgba(0,255,136,0.25)!important;
+  background:rgba(0,8,3,0.95)!important;
 }
-.dcard.next{opacity:1!important;border-color:rgba(180,130,30,0.70)!important;box-shadow:inset 0 1px 0 rgba(255,210,60,0.12),0 2px 10px rgba(0,0,0,0.70)!important;}
-/* Активная — та же высота, просто ярче и больше картинка */
+.dcard.next{opacity:1!important;border-color:rgba(0,255,136,0.3)!important;box-shadow:inset 0 1px 0 rgba(0,255,136,0.08),0 2px 8px rgba(0,0,0,0.8)!important;}
+/* Активная — cyber terminal стиль */
 .dcard.cur{
-  background:linear-gradient(170deg,rgba(50,28,0,0.99),rgba(22,10,0,0.99))!important;
-  border:2px solid #c8960e!important;
+  background:rgba(0,8,3,0.99)!important;
+  border:2px solid #00ff88!important;
   box-shadow:
-    0 0 0 1px rgba(255,215,60,0.35),
-    0 0 14px 4px rgba(255,180,0,0.90),
-    0 0 36px 8px rgba(255,150,0,0.45),
-    inset 0 1px 0 rgba(255,225,80,0.14)!important;
+    0 0 0 1px rgba(0,255,136,0.35),
+    0 0 14px 4px rgba(0,255,136,0.7),
+    0 0 32px 6px rgba(0,255,136,0.3),
+    inset 0 1px 0 rgba(0,255,136,0.15)!important;
   height:110px!important; opacity:1!important; z-index:5!important;
   animation:dPG 2s ease-in-out infinite!important;
 }
 .dcard.gcur{
-  background:linear-gradient(170deg,rgba(0,35,14,0.99),rgba(0,14,5,0.99))!important;
-  border:2px solid #19a050!important;
+  background:rgba(0,8,3,0.99)!important;
+  border:2px solid #00ff88!important;
   box-shadow:
-    0 0 0 1px rgba(46,204,113,0.38),
-    0 0 14px 4px rgba(46,204,113,0.90),
-    0 0 36px 8px rgba(46,204,113,0.45),
-    inset 0 1px 0 rgba(80,255,140,0.10)!important;
+    0 0 0 1px rgba(0,255,136,0.38),
+    0 0 14px 4px rgba(0,255,136,0.85),
+    0 0 32px 7px rgba(0,255,136,0.4),
+    inset 0 1px 0 rgba(0,255,136,0.12)!important;
   height:110px!important; opacity:1!important; z-index:5!important;
   animation:dPGG 2s ease-in-out infinite!important;
 }
 @keyframes dPG{
-  0%,100%{box-shadow:0 0 0 1px rgba(255,215,60,.35),0 0 12px 3px rgba(255,180,0,.85),0 0 32px 7px rgba(255,150,0,.42),inset 0 1px 0 rgba(255,225,80,.14);}
-  50%    {box-shadow:0 0 0 1px rgba(255,230,80,.55),0 0 24px 7px rgba(255,210,0,1),0 0 58px 12px rgba(255,170,0,.65),inset 0 1px 0 rgba(255,240,100,.22);}
+  0%,100%{box-shadow:0 0 0 1px rgba(0,255,136,.35),0 0 12px 3px rgba(0,255,136,.7),0 0 28px 5px rgba(0,255,136,.3),inset 0 1px 0 rgba(0,255,136,.15);}
+  50%    {box-shadow:0 0 0 1px rgba(0,255,136,.6),0 0 22px 6px rgba(0,255,136,1),0 0 50px 10px rgba(0,255,136,.5),inset 0 1px 0 rgba(0,255,136,.25);}
 }
 @keyframes dPGG{
-  0%,100%{box-shadow:0 0 0 1px rgba(46,204,113,.38),0 0 12px 3px rgba(46,204,113,.85),0 0 32px 7px rgba(46,204,113,.42),inset 0 1px 0 rgba(80,255,140,.10);}
-  50%    {box-shadow:0 0 0 1px rgba(70,240,130,.55),0 0 24px 7px rgba(46,220,130,1),0 0 58px 12px rgba(46,204,113,.65),inset 0 1px 0 rgba(110,255,160,.20);}
+  0%,100%{box-shadow:0 0 0 1px rgba(0,255,136,.38),0 0 12px 3px rgba(0,255,136,.85),0 0 28px 5px rgba(0,255,136,.4),inset 0 1px 0 rgba(0,255,136,.12);}
+  50%    {box-shadow:0 0 0 1px rgba(0,255,136,.6),0 0 22px 7px rgba(0,255,136,1),0 0 50px 12px rgba(0,255,136,.55),inset 0 1px 0 rgba(0,255,136,.22);}
 }
 
 /* День лейбл */
-.dcard-day{font-size:8px!important;font-weight:700!important;color:rgba(255,255,255,0.55)!important;line-height:1!important;z-index:1!important;}
-.dcard.cur  .dcard-day{color:#f5c518!important;font-size:9px!important;font-weight:900!important;text-shadow:0 0 8px rgba(255,200,0,.9);}
-.dcard.gcur .dcard-day{color:#2ecc71!important;font-size:9px!important;font-weight:900!important;text-shadow:0 0 8px rgba(46,204,113,.9);}
-.dcard.done .dcard-day{color:rgba(80,180,100,0.55)!important;}
+.dcard-day{font-size:8px!important;font-weight:700!important;font-family:'IBM Plex Mono',monospace!important;color:rgba(255,255,255,0.4)!important;line-height:1!important;z-index:1!important;}
+.dcard.cur  .dcard-day{color:#00ff88!important;font-size:9px!important;font-weight:900!important;text-shadow:0 0 8px rgba(0,255,136,.9);}
+.dcard.gcur .dcard-day{color:#00ff88!important;font-size:9px!important;font-weight:900!important;text-shadow:0 0 8px rgba(0,255,136,.9);}
+.dcard.done .dcard-day{color:rgba(0,255,136,0.3)!important;}
 
 /* Картинка — одинаковый размер у всех, только у cur/gcur больше */
 .dcard-img{
@@ -1623,12 +1712,12 @@ try {
 .dcard-amt{
   display:flex!important;align-items:center!important;justify-content:center!important;
   gap:2px!important;font-size:10px!important;font-weight:900!important;
-  color:rgba(255,255,255,0.80)!important;line-height:1!important;z-index:1!important;
-  flex-shrink:0!important;
+  color:rgba(0,255,136,0.45)!important;line-height:1!important;z-index:1!important;
+  flex-shrink:0!important;font-family:'IBM Plex Mono',monospace!important;
 }
-.dcard.cur  .dcard-amt{font-size:13px!important;color:#f5c518!important;text-shadow:0 0 8px rgba(255,200,0,.95);}
-.dcard.gcur .dcard-amt{font-size:13px!important;color:#2ecc71!important;text-shadow:0 0 8px rgba(46,204,113,.95);}
-.dcard.done .dcard-amt{font-size:9px!important;color:rgba(160,220,160,0.55)!important;}
+.dcard.cur  .dcard-amt{font-size:13px!important;color:#00ff88!important;text-shadow:0 0 8px rgba(0,255,136,.95);}
+.dcard.gcur .dcard-amt{font-size:13px!important;color:#00ff88!important;text-shadow:0 0 8px rgba(0,255,136,.95);}
+.dcard.done .dcard-amt{font-size:9px!important;color:rgba(0,255,136,0.25)!important;}
 .dcard-amt img{width:9px!important;height:9px!important;object-fit:contain!important;}
 .dcard.cur .dcard-amt img,.dcard.gcur .dcard-amt img{width:12px!important;height:12px!important;}
 
@@ -1662,14 +1751,16 @@ try {
   margin:0 10px!important;flex:1!important;min-height:0!important;
   position:relative!important;border-radius:12px!important;
   overflow:hidden!important;background:transparent!important;border:none!important;
+  display:flex!important;align-items:center!important;gap:10px!important;
 }
-/* Гринч — яркий, чистый, без грязных теней */
+/* Гринч — большой, по центру */
 #dGrinchImg{
-  position:absolute!important;bottom:0!important;left:-4px!important;
-  height:100%!important;width:auto!important;max-width:55%!important;
-  object-fit:contain!important;object-position:bottom left!important;
-  filter:brightness(1.18) contrast(1.08) saturate(1.15) drop-shadow(2px 0 10px rgba(0,0,0,0.45))!important;
+  position:relative!important;bottom:auto!important;left:auto!important;
+  height:auto!important;width:140px!important;max-width:140px!important;
+  object-fit:contain!important;
+  filter:brightness(1.18) contrast(1.08) saturate(1.15) drop-shadow(0 0 16px rgba(0,255,136,0.5))!important;
   z-index:2!important;pointer-events:none!important;
+  flex-shrink:0!important;
   animation:dGrinchFloat 5.5s ease-in-out infinite!important;
 }
 @keyframes dGrinchFloat{
@@ -1803,53 +1894,47 @@ try {
 
 /* ═══ ТАЙМЕР ═══ */
 #dTimerWrap{
-  margin:0 8px!important;flex-shrink:0!important;
+  margin:0 12px!important;flex-shrink:0!important;
   display:flex!important;align-items:center!important;justify-content:center!important;
-  gap:4px!important;
-  max-height:75px!important;overflow:visible!important;
-  padding-top:6px!important;
+  max-height:80px!important;overflow:visible!important;
 }
-.dtimer-side{
-  flex-shrink:0!important;width:36px!important;height:24px!important;
-  filter:drop-shadow(0 0 4px rgba(255,210,0,0.8))!important;
-}
-.dtimer-side svg{width:100%!important;height:100%!important;display:block!important;}
 #dTimerBox{
   flex:1!important;text-align:center!important;
-  background:transparent!important;
-  border:none!important;
-  border-radius:0!important;
-  padding:4px 8px 3px!important;
-  box-shadow:none!important;
+  background:rgba(0,0,0,0.7)!important;
+  border:1px solid rgba(0,255,136,0.15)!important;
+  border-radius:4px!important;
+  padding:8px 12px!important;
+  position:relative!important;overflow:hidden!important;
 }
 #dTimerMain{
-  font-size:clamp(18px,5.5vw,24px)!important;font-weight:900!important;
-  color:#fff!important;letter-spacing:2px!important;
-  line-height:1.3!important;
-  text-shadow:0 0 22px rgba(255,210,0,0.95),0 0 50px rgba(255,170,0,0.45),0 2px 4px rgba(0,0,0,0.95)!important;
-  font-family:'Grinched',cursive!important;
-  display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;
+  font-size:clamp(22px,6vw,30px)!important;font-weight:700!important;
+  color:#00ff88!important;letter-spacing:3px!important;
+  line-height:1.2!important;
+  text-shadow:0 0 20px rgba(0,255,136,0.9),0 0 40px rgba(0,255,136,0.4)!important;
+  font-family:'IBM Plex Mono',monospace!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
   white-space:nowrap;overflow:visible;max-width:100%;
 }
 #dTimerMain.ready-state{
-  font-size:clamp(11px,3.5vw,14px)!important;
-  color:#ffe84d!important;
-  letter-spacing:1px!important;
-  text-shadow:0 0 8px rgba(255,220,0,1),0 0 20px rgba(255,180,0,0.9),0 0 40px rgba(255,140,0,0.6)!important;
+  font-size:clamp(12px,3.5vw,15px)!important;
+  color:#00ff88!important;
+  letter-spacing:2px!important;
+  text-shadow:0 0 10px rgba(0,255,136,1),0 0 24px rgba(0,255,136,0.7)!important;
   display:block!important;
+  font-family:'IBM Plex Mono',monospace!important;
   animation:dTimerReady 1.2s ease-in-out infinite alternate;
 }
 #dTimerMain #dTimerVal2{
-  font-size:28px!important;font-weight:900!important;
-  color:#fff!important;letter-spacing:2px!important;
-  text-shadow:0 0 22px rgba(255,210,0,0.95),0 0 50px rgba(255,170,0,0.45)!important;
-  font-family:'Grinched',cursive!important;
+  font-size:clamp(22px,6vw,30px)!important;font-weight:700!important;
+  color:#00ff88!important;letter-spacing:3px!important;
+  text-shadow:0 0 20px rgba(0,255,136,0.9),0 0 40px rgba(0,255,136,0.4)!important;
+  font-family:'IBM Plex Mono',monospace!important;
 }
 #dStreakTxt2{
-  font-size:10px!important;color:rgba(255,210,100,0.82)!important;
+  font-size:10px!important;color:rgba(255,215,0,0.6)!important;
   letter-spacing:2px!important;font-weight:700!important;
-  margin-top:1px!important;text-align:center!important;
-  text-shadow:0 0 8px rgba(255,180,0,0.4)!important;
+  margin-top:4px!important;text-align:center!important;
+  font-family:'IBM Plex Mono',monospace!important;
 }
 
 /* ═══ ЧАСТИЦЫ ═══ */
@@ -1862,116 +1947,115 @@ try {
 <!-- ====== DAILY SCREEN ====== -->
 <div id="s-daily" class="screen">
 
-  <!-- ФОН -->
+  <!-- ФОН — зимний лес с тёмным оверлеем -->
   <div style="position:absolute;inset:0;z-index:0;">
-    <img src="assets/img/Image_3995.jpg" style="width:100%;height:100%;object-fit:cover;opacity:0.92;">
-    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,8,0,0.72)0%,rgba(0,4,0,0.10)30%,rgba(0,4,0,0.25)62%,rgba(0,2,0,0.88)100%);"></div>
+    <img src="assets/img/Image_3995.jpg" style="width:100%;height:100%;object-fit:cover;opacity:0.5;">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.85)0%,rgba(0,5,2,0.7)40%,rgba(0,0,0,0.9)100%);"></div>
+    <!-- Scanlines -->
+    <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);pointer-events:none;z-index:1;"></div>
   </div>
 
   <!-- КОНТЕНТ -->
-  <div class="daily-content" style="position:relative;z-index:3;display:flex;flex-direction:column;width:100%;height:100%;box-sizing:border-box;padding:max(6px,env(safe-area-inset-top)) 0 max(4px,env(safe-area-inset-bottom));gap:3px;">
+  <div class="daily-content" style="position:relative;z-index:3;display:flex;flex-direction:column;width:100%;height:100%;box-sizing:border-box;padding:max(6px,env(safe-area-inset-top)) 0 max(4px,env(safe-area-inset-bottom));gap:0;">
 
-    <!-- ① ШАПКА -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;">
-      <div onclick="show('menu')" style="width:32px;height:32px;background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.12);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;color:#fff;-webkit-tap-highlight-color:transparent;flex-shrink:0;">◀</div>
-      <div style="text-align:center;flex:1;padding:0 6px;">
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:1px;">
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(245,197,24,0.6));"></div>
-          <span style="color:#c8960e;font-size:9px;text-shadow:0 0 6px rgba(255,180,0,0.9);">✦</span>
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(245,197,24,0.6),transparent);"></div>
-        </div>
-        <div style="font-size:17px;font-weight:900;color:#f5c518;letter-spacing:2.5px;text-shadow:0 0 22px rgba(255,200,0,1),0 0 50px rgba(255,175,0,0.6),0 2px 4px rgba(0,0,0,0.9);line-height:1.1;font-family:'Grinched',cursive;white-space:nowrap;">ЕЖЕДНЕВНАЯ ДОБЫЧА</div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;">
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(245,197,24,0.4));"></div>
-          <div style="font-size:8px;color:rgba(255,255,255,0.55);letter-spacing:0.5px;">Не пропусти день — <b style="color:rgba(255,220,100,0.85);">усиливай награду</b></div>
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(245,197,24,0.4),transparent);"></div>
-        </div>
+    <!-- ① ШАПКА — терминал стиль -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px 8px;flex-shrink:0;border-bottom:1px solid rgba(0,255,136,0.08);">
+      <div onclick="show('menu')" style="width:32px;height:32px;background:rgba(0,0,0,0.8);border:1px solid rgba(0,255,136,0.2);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;color:#00ff88;-webkit-tap-highlight-color:transparent;flex-shrink:0;">◀</div>
+      <div style="text-align:center;flex:1;padding:0 8px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.4);letter-spacing:2px;margin-bottom:3px;">// DAILY_REWARDS.exe</div>
+        <div style="font-family:'Grinched',cursive;font-size:16px;color:#00ff88;letter-spacing:2px;white-space:nowrap;text-shadow:0 0 20px rgba(0,255,136,0.8),0 0 40px rgba(0,255,136,0.3);line-height:1;">ЕЖЕДНЕВНАЯ ДОБЫЧА</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:rgba(0,255,136,0.35);letter-spacing:1px;margin-top:2px;">Не пропусти день — <span style="color:rgba(0,255,136,0.7);">усиливай награду</span></div>
       </div>
       <div style="width:32px;flex-shrink:0;"></div>
     </div>
 
     <!-- ② ПАНЕЛЬ ИГРОКА -->
-    <div style="display:flex;align-items:center;gap:6px;margin:0 10px;flex-shrink:0;">
-      <div style="width:8px;height:8px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px rgba(46,204,113,0.9);flex-shrink:0;"></div>
-      <div>
-        <div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;text-shadow:0 1px 6px rgba(0,0,0,0.9);" id="dPlayerNick2">Игрок</div>
-        <div style="font-size:8px;color:rgba(255,255,255,0.42);letter-spacing:1px;font-weight:700;" id="dPlayerLvl2">УРОВЕНЬ 1</div>
-      </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 12px;flex-shrink:0;">
+      <div style="width:7px;height:7px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px rgba(0,255,136,0.9);flex-shrink:0;animation:dailyPulse 1.5s ease infinite;"></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#fff;" id="dPlayerNick2">Игрок</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.4);letter-spacing:1px;" id="dPlayerLvl2">УРОВЕНЬ 1</div>
     </div>
 
-    <!-- ③ ТАЙМЕР -->
-    <div id="dTimerWrap">
-      <div id="dTimerBox">
-        <div id="dTimerMain"><span id="dTimerVal2">--:--:--</span></div>
-        <div id="dStreakTxt2">◆ СЕРИЯ: 0 дней ◆</div>
+    <!-- ③ ТАЙМЕР — большой терминальный дисплей -->
+    <div id="dTimerWrap" style="margin:0 12px 6px;flex-shrink:0;">
+      <div id="dTimerBox" style="background:rgba(0,0,0,0.7);border:1px solid rgba(0,255,136,0.15);border-radius:4px;padding:10px 12px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,136,0.5),transparent);"></div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.4);letter-spacing:2px;margin-bottom:4px;">СЛЕДУЮЩАЯ НАГРАДА</div>
+        <div id="dTimerMain" style="font-family:'IBM Plex Mono',monospace;font-size:32px;font-weight:700;color:#00ff88;text-shadow:0 0 20px rgba(0,255,136,0.8);letter-spacing:2px;line-height:1;"><span id="dTimerVal2">--:--:--</span></div>
+        <div id="dStreakTxt2" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,215,0,0.6);letter-spacing:2px;margin-top:4px;">◆ СЕРИЯ: 0 дней ◆</div>
       </div>
     </div>
 
     <!-- ④ ДЕНЬ -->
     <div id="dDayTitle" style="flex-shrink:0;"></div>
 
-    <!-- ⑤ КАРТОЧКИ — все одинаковой высоты, без выступов -->
+    <!-- ⑤ КАРТОЧКИ -->
     <div id="dCardsTrack" style="flex-shrink:0;"></div>
 
     <!-- ⑥ ХИНТ -->
     <div id="dLevelUpHint" style="flex-shrink:0;"></div>
 
-    <!-- ⑦ ВКЛАДКИ -->
-    <div id="dTabsRow">
-      <div id="dTab2_0" class="dtab-item" onclick="dTab2Switch(0)" style="border-right:1px solid rgba(255,255,255,0.07);background:rgba(241,196,15,0.15);">
-        <div class="dtab-name" style="font-size:10px;font-weight:900;color:#f5c518;letter-spacing:0.5px;line-height:1.2;">ПОДАРКИ</div>
-        <div class="dtab-sub" style="font-size:7px;font-weight:700;color:rgba(241,196,15,0.6);">1 – 7</div>
+    <!-- ⑦ ВКЛАДКИ — терминал стиль -->
+    <div id="dTabsRow" style="display:flex;margin:6px 12px;flex-shrink:0;background:rgba(0,0,0,0.6);border:1px solid rgba(0,255,136,0.12);border-radius:4px;overflow:hidden;">
+      <div id="dTab2_0" class="dtab-item" onclick="dTab2Switch(0)" style="border-right:1px solid rgba(0,255,136,0.1);">
+        <div class="dtab-name" style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:#f5c518;letter-spacing:1px;">ПОДАРКИ</div>
+        <div class="dtab-sub" style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:rgba(245,197,24,0.5);">1 – 7</div>
       </div>
-      <div id="dTab2_1" class="dtab-item" onclick="dTab2Switch(1)" style="background:transparent;">
-        <div class="dtab-name" style="font-size:10px;font-weight:900;color:rgba(255,255,255,0.30);">GRINCH TOKENS</div>
-        <div class="dtab-sub" style="font-size:7px;font-weight:700;color:rgba(255,255,255,0.18);">8 – 30</div>
-      </div>
-    </div>
-
-    <!-- ⑧ БОНУСНЫЙ БЛОК: Гринч слева + 2 строки сундуков справа -->
-    <div id="dBonusBlock">
-      <!-- Лучи света за Гринчем -->
-      <div id="dGrinchRays" aria-hidden="true">
-        <div class="dray"></div><div class="dray"></div><div class="dray"></div>
-        <div class="dray"></div><div class="dray"></div><div class="dray"></div>
-        <div class="dray"></div><div class="dray"></div>
-        <div id="dRayCore"></div>
-      </div>
-      <div id="dGrinchAura"></div>
-      <div id="dGrinchSparkles" aria-hidden="true">
-        <div class="dgsp"></div><div class="dgsp"></div><div class="dgsp"></div>
-        <div class="dgsp"></div><div class="dgsp"></div>
-      </div>
-      <img id="dGrinchImg" src="assets/img/Image_3994.jpg" onerror="this.style.display='none'">
-      <div id="dChestPanel">
-        <div class="dchest-row gold-row">
-          <div class="dchest-img-wrap gold">
-            <img src="assets/img/Image_3990.jpg" onerror="this.outerHTML='<span style=font-size:38px>🏆</span>'">
-          </div>
-          <div class="dchest-text">
-            <div class="dchest-days">7 дней подряд</div>
-            <div class="dchest-label gold">супер сундук</div>
-          </div>
-        </div>
-        <div class="dchest-row green-row">
-          <div class="dchest-img-wrap green">
-            <img src="assets/img/Image_3989.jpg" onerror="this.outerHTML='<span style=font-size:38px>🎀</span>'">
-          </div>
-          <div class="dchest-text">
-            <div class="dchest-days">30 дней подряд</div>
-            <div class="dchest-label green">легендарная награда</div>
-          </div>
-        </div>
+      <div id="dTab2_1" class="dtab-item" onclick="dTab2Switch(1)">
+        <div class="dtab-name" style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:rgba(0,255,136,0.4);letter-spacing:1px;">GRINCH TOKENS</div>
+        <div class="dtab-sub" style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:rgba(0,255,136,0.25);">8 – 30</div>
       </div>
     </div>
 
-    <!-- ⑨ КНОПКА -->
-    <div style="margin:-16px 16px 0;padding-bottom:max(4px,env(safe-area-inset-bottom));flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;">
-      <img id="dClaimBtn2" src="assets/img/Image_3985.jpg"
-        onclick="claimDaily()"
-        style="width:100%;max-height:68px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:14px;display:block;"
-        onerror="this.outerHTML='<button onclick=claimDaily() style=width:100%;padding:14px;border:none;border-radius:14px;font-size:17px;font-weight:900;color:#fff;cursor:pointer;background:linear-gradient(160deg,#d32f2f,#b71c1c);letter-spacing:2px;font-family:Grinched,cursive;>🎁 ЗАБРАТЬ НАГРАДУ</button>'">
-      <div id="dClaimLbl" style="text-align:center;font-size:12px;font-weight:700;color:rgba(255,255,255,0.38);letter-spacing:0.3px;min-height:16px;width:100%;"></div>
+    <!-- ⑧ БОНУСНЫЙ БЛОК — переработанный -->
+    <div id="dBonusBlock" style="display:flex;gap:10px;margin:0 12px;flex:1;min-height:0;align-items:center;">
+      <!-- Гринч -->
+      <div style="flex-shrink:0;position:relative;width:130px;height:100%;display:flex;align-items:center;justify-content:center;">
+        <div id="dGrinchRays" aria-hidden="true">
+          <div class="dray"></div><div class="dray"></div><div class="dray"></div>
+          <div class="dray"></div><div class="dray"></div><div class="dray"></div>
+          <div class="dray"></div><div class="dray"></div>
+          <div id="dRayCore"></div>
+        </div>
+        <div id="dGrinchAura"></div>
+        <div id="dGrinchSparkles" aria-hidden="true">
+          <div class="dgsp"></div><div class="dgsp"></div><div class="dgsp"></div>
+          <div class="dgsp"></div><div class="dgsp"></div>
+        </div>
+        <img id="dGrinchImg" src="assets/img/Image_3994.jpg" style="width:130px;height:auto;object-fit:contain;filter:drop-shadow(0 0 16px rgba(0,255,136,0.5));position:relative;z-index:2;" onerror="this.style.display='none'">
+      </div>
+
+      <!-- Сундуки — терминал стиль -->
+      <div id="dChestPanel" style="flex:1;display:flex;flex-direction:column;gap:6px;">
+        <!-- Сундук 7 -->
+        <div class="dchest-row gold-row" style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.25);border-radius:4px;padding:8px 10px;display:flex;align-items:center;gap:8px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.5),transparent);"></div>
+          <div class="dchest-img-wrap gold" style="width:44px;height:44px;flex-shrink:0;">
+            <img src="assets/img/Image_3990.jpg" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 8px rgba(255,215,0,0.6));" onerror="this.outerHTML='<span style=font-size:32px>🏆</span>'">
+          </div>
+          <div class="dchest-text">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.5);letter-spacing:1px;">7 ДНЕЙ ПОДРЯД</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.6);">СУПЕР-СУНДУК</div>
+          </div>
+        </div>
+        <!-- Сундук 30 -->
+        <div class="dchest-row green-row" style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:8px 10px;display:flex;align-items:center;gap:8px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,136,0.5),transparent);"></div>
+          <div class="dchest-img-wrap green" style="width:44px;height:44px;flex-shrink:0;">
+            <img src="assets/img/Image_3989.jpg" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 8px rgba(0,255,136,0.5));" onerror="this.outerHTML='<span style=font-size:32px>🎀</span>'">
+          </div>
+          <div class="dchest-text">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.4);letter-spacing:1px;">30 ДНЕЙ ПОДРЯД</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:#00ff88;text-shadow:0 0 10px rgba(0,255,136,0.6);">МЕГА-БОКС 🎀</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑨ КНОПКА — переработана -->
+    <div style="margin:6px 12px 0;padding-bottom:max(4px,env(safe-area-inset-bottom));flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;">
+      <button id="dClaimBtn2" onclick="claimDaily()" style="width:100%;padding:15px;border:none;border-radius:4px;font-size:15px;font-weight:900;color:#000;cursor:pointer;background:linear-gradient(135deg,#00ff88,#00cc6a);letter-spacing:3px;font-family:'IBM Plex Mono',monospace;box-shadow:0 4px 20px rgba(0,255,136,0.4);-webkit-tap-highlight-color:transparent;">🎁 ЗАБРАТЬ НАГРАДУ</button>
+      <div id="dClaimLbl" style="font-family:'IBM Plex Mono',monospace;text-align:center;font-size:10px;color:rgba(0,255,136,0.4);letter-spacing:1px;min-height:16px;width:100%;"></div>
     </div>
 
   </div>

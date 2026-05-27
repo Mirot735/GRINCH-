@@ -132,27 +132,118 @@ function _invUseItem(key) {
   setTimeout(function() { _invRenderBoosts(); }, 100);
 }
 
+// ── Открытие сундука ──────────────────────────────────────
+function _invOpenChest(type) {
+  var inv = {};
+  try { inv = JSON.parse(localStorage.getItem('inv')||'{}'); } catch(e) {}
+  if (window.S && S.inv) inv = Object.assign({}, S.inv, inv);
+
+  var key = type === 'mega' ? 'megaBox' : 'chest7';
+  if (!inv[key] || inv[key] <= 0) {
+    if (typeof toast === 'function') toast('Нет сундуков!');
+    return;
+  }
+
+  // Награды
+  var rewards;
+  if (type === 'mega') {
+    var roll = Math.random();
+    if      (roll < 0.05) rewards = [{type:'grinch', amount:500,  label:'🟢 500 GRINCH — ДЖЕКПОТ!'}];
+    else if (roll < 0.2)  rewards = [{type:'grinch', amount:200,  label:'🟢 200 GRINCH'}];
+    else if (roll < 0.5)  rewards = [{type:'grinch', amount:100,  label:'🟢 100 GRINCH'}];
+    else if (roll < 0.75) rewards = [{type:'gifts',  amount:5000, label:'🎁 5000 подарков'}];
+    else                  rewards = [{type:'gifts',  amount:2000, label:'🎁 2000 подарков'}];
+  } else {
+    rewards = [{type:'gifts', amount:1000, label:'🎁 1000 подарков'}, {type:'grinch', amount:50, label:'🟢 50 GRINCH'}];
+  }
+
+  inv[key] -= 1;
+  if (inv[key] <= 0) delete inv[key];
+
+  var curGifts  = (window.S && S.gifts)  || parseInt(localStorage.getItem('gifts')||'0', 10);
+  var curGrinch = (window.S && S.grinch) || parseInt(localStorage.getItem('grinch')||'0', 10);
+  var rewardLines = [];
+  rewards.forEach(function(r) {
+    if (r.type === 'gifts')  { curGifts  += r.amount; rewardLines.push(r.label); }
+    if (r.type === 'grinch') { curGrinch += r.amount; rewardLines.push(r.label); }
+  });
+
+  localStorage.setItem('inv',    JSON.stringify(inv));
+  localStorage.setItem('gifts',  String(curGifts));
+  localStorage.setItem('grinch', String(curGrinch));
+  if (window.S) {
+    S.inv=inv; S.gifts=curGifts; S.grinch=curGrinch;
+    if (typeof save==='function') try{save();}catch(e){}
+  }
+
+  ['menuGifts','shopGifts','pGifts'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.textContent=curGifts.toLocaleString();
+  });
+  ['menuGrinch','shopGrinch','pGrinch'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.textContent=curGrinch.toLocaleString();
+  });
+  try{if(typeof updateMenuTopbar==='function')updateMenuTopbar();}catch(e){}
+
+  // Конфетти
+  var cols=['#f1c40f','#2ecc71','#ff69b4','#fff','#f5c518'];
+  var cx=window.innerWidth/2, cy=window.innerHeight/2;
+  for(var i=0;i<32;i++){
+    var p=document.createElement('div'); p.className='dpt';
+    var ang=Math.random()*Math.PI*2, dist=100+Math.random()*180, sz=(5+Math.random()*9).toFixed(0);
+    p.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+sz+'px;height:'+sz+'px;background:'+cols[i%5]+';'
+      +'--tx:'+(Math.cos(ang)*dist).toFixed(0)+'px;--ty:'+(-(Math.abs(Math.sin(ang)*dist)+60)).toFixed(0)+'px;'
+      +'animation-duration:'+(0.6+Math.random()*.9).toFixed(2)+'s;';
+    document.body.appendChild(p);
+    setTimeout((function(e){return function(){if(e.parentNode)e.parentNode.removeChild(e);};})(p),1600);
+  }
+
+  // Попап
+  var popup = document.getElementById('_invPopup');
+  if (!popup) {
+    popup = document.createElement('div');
+    popup.id = '_invPopup';
+    popup.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);';
+    popup.onclick = function(e){ if(e.target===popup) popup.style.display='none'; };
+    document.body.appendChild(popup);
+  }
+  popup.style.display = 'flex';
+  popup.innerHTML = '<div style="background:rgba(5,5,5,0.97);border:2px solid #f5c518;border-radius:22px;padding:28px 22px;width:82%;max-width:310px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:0 0 40px rgba(245,197,24,0.4);">'
+    + '<div style="font-size:60px;animation:goldPulse 1s infinite;">'+(type==='mega'?'🎀':'🏆')+'</div>'
+    + '<div style="font-size:20px;font-weight:900;color:#f5c518;">'+(type==='mega'?'МЕГА-БОКС':'СУПЕР-СУНДУК')+'</div>'
+    + '<div style="font-size:13px;color:rgba(255,255,255,0.5);">Твоя награда:</div>'
+    + '<div style="display:flex;flex-direction:column;gap:8px;width:100%;">'
+    + rewardLines.map(function(l){return '<div style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:10px;padding:10px;font-size:16px;font-weight:900;color:#fff;">'+l+'</div>';}).join('')
+    + '</div>'
+    + '<button onclick="document.getElementById(\'_invPopup\').style.display=\'none\';switchInvTab(\'res\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#f5c518,#e6a817);border:none;border-radius:14px;font-size:15px;font-weight:900;color:#000;cursor:pointer;letter-spacing:1px;">ЗАБРАТЬ!</button>'
+    + '</div>';
+
+  if(typeof toast==='function') toast('🎉 '+rewardLines.join(' + '),3000);
+}
+
 // ── Ресурсы ───────────────────────────────────────────────
 function _invRenderRes() {
   var el = document.getElementById('invGridRes');
   if (!el) return;
   var inv = {};
   try { inv = JSON.parse(localStorage.getItem('inv') || '{}'); } catch(e) {}
+  if (window.S && S.inv) Object.keys(S.inv).forEach(function(k){ if(!inv[k]) inv[k]=S.inv[k]; });
   var chest7  = inv.chest7  || 0;
   var megaBox = inv.megaBox || 0;
 
-  function resRow(emoji, name, val, color, sub) {
-    return '<div style="background:rgba(0,0,0,0.6);border:1.5px solid ' + color + ';border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:10px;">'
-      + '<div style="font-size:36px;flex-shrink:0;">' + emoji + '</div>'
-      + '<div style="flex:1;"><div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + name + '</div>'
-      + '<div style="font-size:26px;font-weight:900;color:#fff;">' + val + '</div>'
-      + (sub ? '<div style="font-size:10px;color:rgba(255,255,255,0.35);">' + sub + '</div>' : '')
-      + '</div></div>';
+  function resRow(emoji, name, val, color, sub, openType) {
+    return '<div onclick="_invOpenChest(\''+openType+'\')" style="background:rgba(0,0,0,0.6);border:1.5px solid '+color+';border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:10px;cursor:pointer;">'
+      + '<div style="font-size:36px;flex-shrink:0;">'+emoji+'</div>'
+      + '<div style="flex:1;"><div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;letter-spacing:1px;text-transform:uppercase;">'+name+'</div>'
+      + '<div style="font-size:26px;font-weight:900;color:#fff;">×'+val+'</div>'
+      + (sub?'<div style="font-size:10px;color:rgba(255,255,255,0.35);">'+sub+'</div>':'')
+      + '</div>'
+      + '<div style="font-size:12px;font-weight:900;color:'+color+';border:1px solid '+color+';border-radius:10px;padding:6px 12px;flex-shrink:0;">ОТКРЫТЬ</div>'
+      + '</div>';
   }
 
   var html = '<div style="padding:4px 0;">';
-  if (chest7 > 0)  html += resRow('🏆','Супер-сундук','×'+chest7,'rgba(241,196,15,0.8)','Награда за 7 дней подряд');
-  if (megaBox > 0) html += resRow('🎀','Мега-бокс','×'+megaBox,'rgba(147,112,219,0.8)','Награда за 30 дней подряд');
+  if (chest7  > 0) html += resRow('🏆','Супер-сундук', chest7,  'rgba(241,196,15,0.8)', 'Нажми чтобы открыть', 'chest7');
+  if (megaBox > 0) html += resRow('🎀','Мега-бокс',    megaBox, 'rgba(147,112,219,0.8)','Нажми чтобы открыть', 'mega');
   if (!chest7 && !megaBox) {
     html += '<div style="text-align:center;padding:50px 20px;">'
       + '<div style="font-size:48px;margin-bottom:12px;">📦</div>'
