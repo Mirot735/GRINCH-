@@ -9,6 +9,108 @@ var PVP_W = 0, PVP_H = 0, PVP_FLOOR = 0;
 var PVP_RUNNING = false;
 var PVP_RAF = null;
 
+// ── TILES — assets/tiles/ ─────────────────────────────────────────
+var _TILES = {};
+(function(){
+  var _tileNames = [
+    'stone_1','stone_2','stone_3','stone_4','stone_5','stone_6',
+    'stone_7','stone_8','stone_9','stone_10','stone_11','stone_12',
+    'stone_13','stone_14','stone_15',
+    'moss_1','moss_2','moss_3','moss_4','moss_5','moss_6',
+    'moss_7','moss_8','moss_9','moss_10','moss_11','moss_12',
+    'moss_13','moss_14','moss_15',
+    'rune_1','rune_2','rune_3',
+    'chain_1','chain_2','chain_hook',
+    'spikes','chest','shroom_1','shroom_2','shroom_3',
+    'coal_pile','coal_pile2','orb_green',
+    'pyramid','floor_panel',
+  ];
+  _tileNames.forEach(function(name){
+    var img=new Image();
+    img.onload=function(){_TILES[name]=img;};
+    img.onerror=function(){console.warn('Tile missing: '+name+'.png');};
+    img.src='assets/tiles/'+name+'.png';
+  });
+})();
+
+
+// ── SLASH EFFECTS — U0U.png 677×369, 4 rows × 8 cols, кадр 84×92 ─
+// Ряд 0: дуга-взмах (sword)   — кадры 0-7
+// Ряд 1: укол/вспышка (sword) — кадры 8-15
+// Ряд 2: кольцо-спин (scythe) — кадры 16-23
+// Ряд 3: взрыв/портал (crit)  — кадры 24-31
+var SLASH_SPRITE = {
+  img: null, loaded: false, src: 'assets/img/U0U.png',
+  fw: 84, fh: 92, cols: 8,
+};
+(function(){
+  var _si = new Image();
+  _si.onload = function(){ SLASH_SPRITE.img = _si; SLASH_SPRITE.loaded = true; };
+  _si.onerror = function(){ console.warn('U0U.png missing'); };
+  _si.src = SLASH_SPRITE.src;
+})();
+
+// Активные slash-эффекты на сцене
+var _slashFX = [];
+
+// Таблица: какой ряд/кадры для каждого оружия
+var SLASH_ANIMS = {
+  sword:  { row: 0, frames: [0,1,2,3],    fps: 18 },  // дуга, 4 кадра
+  scythe: { row: 2, frames: [0,1,2,3,4],  fps: 14 },  // кольцо, 5 кадров
+  bow:    { row: 1, frames: [4,5,6],       fps: 20 },  // вспышка, 3 кадра
+  crit:   { row: 3, frames: [0,1,2,3],    fps: 16 },  // взрыв, 4 кадра
+};
+
+function _spawnSlashFX(x, y, dir, weapon, isCrit) {
+  if (!SLASH_SPRITE.loaded) return;
+  var animKey = isCrit ? 'crit' : (weapon || 'sword');
+  var anim = SLASH_ANIMS[animKey] || SLASH_ANIMS.sword;
+  _slashFX.push({
+    x: x, y: y,
+    dir: dir || 1,        // 1 = вправо, -1 = влево
+    row: anim.row,
+    frames: anim.frames,
+    fps: anim.fps,
+    frameIdx: 0,
+    timer: 0,
+    done: false,
+  });
+}
+
+function _tickSlashFX(dt, ctx) {
+  if (!SLASH_SPRITE.loaded || !SLASH_SPRITE.img) return;
+  _slashFX = _slashFX.filter(function(fx) {
+    fx.timer += dt;
+    var fd = 1000 / fx.fps;
+    if (fx.timer >= fd) {
+      fx.timer -= fd;
+      fx.frameIdx++;
+      if (fx.frameIdx >= fx.frames.length) { fx.done = true; return false; }
+    }
+    var fi   = fx.frames[fx.frameIdx];
+    var sx   = fi * SLASH_SPRITE.fw;
+    var sy   = fx.row * SLASH_SPRITE.fh;
+    var dw   = SLASH_SPRITE.fw * 2.2;   // масштаб ×2.2 — хорошо читается
+    var dh   = SLASH_SPRITE.fh * 2.2;
+    var prog = fx.frameIdx / Math.max(1, fx.frames.length - 1);
+    var alpha = 1 - prog * 0.6;         // плавный fade к концу
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(Math.round(fx.x), Math.round(fx.y - dh * 0.7));
+    if (fx.dir < 0) ctx.scale(-1, 1);  // зеркало относительно точки эффекта
+    ctx.drawImage(
+      SLASH_SPRITE.img,
+      sx, sy, SLASH_SPRITE.fw, SLASH_SPRITE.fh,
+      Math.round(-dw / 2), 0,
+      Math.round(dw), Math.round(dh)
+    );
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    return true;
+  });
+}
+
 // ── СПРАЙТ1: walk/attack ─────────────────────────────────────────
 var BOSS_SPRITE = {
   img: null, loaded: false, src: 'assets/boss/walk.png',
@@ -114,7 +216,8 @@ function _bossTickAnim(dt) {
 
 function _bossDrawSprite(ctx, x, y) {
   var _canvas = _pvp.canvas;
-  var BOSS_H = _canvas ? Math.round(_canvas.height * 0.40) : Math.round(PVP_FLOOR * 0.62);
+  var _isLandscape = _canvas && _canvas.width > _canvas.height;
+  var BOSS_H = _canvas ? Math.round(_canvas.height * (_isLandscape ? 0.66 : 0.43)) : Math.round(PVP_FLOOR * 0.62);
   var useAtk = (_bossAnim.cur==='windup'||_bossAnim.cur==='attack'||_bossAnim.cur==='recover');
   var useS2  = (_bossAnim.cur==='hurt');
   var SP     = useAtk ? BOSS_ATTACK : (useS2 ? BOSS_SPRITE2 : BOSS_SPRITE);
@@ -146,6 +249,15 @@ function _bossDrawSprite(ctx, x, y) {
   ctx.save();
   if(_pvp.boss&&_pvp.boss.facingRight){ctx.translate(x*2,0);ctx.scale(-1,1);}
   ctx.globalAlpha=alpha;
+  // Тень на полу под боссом
+  ctx.save();
+  ctx.globalAlpha=alpha*0.5;
+  ctx.fillStyle='rgba(0,0,0,0.7)';
+  ctx.beginPath();ctx.ellipse(x,y,Math.round(dw*0.38),6,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // Красный glow вокруг босса
+  ctx.shadowColor='rgba(220,60,30,0.8)';
+  ctx.shadowBlur=18;
   // Рисуем кадр
   var _flameIdx = frameNum >= 10 ? frameNum - 10 : -1;
   var _deathImg = null;
@@ -171,6 +283,7 @@ function _bossDrawSprite(ctx, x, y) {
     ctx.drawImage(SP.img, sx, sy, SP.fw, SP.fh, Math.round(x-dw/2), Math.round(y-dh), dw, dh);
   }
   ctx.globalAlpha=1;
+  ctx.shadowBlur=0;
   ctx.restore();
 
   // Красная аура фаза3
@@ -237,18 +350,91 @@ function _pvpInjectStyles(){
   if(document.getElementById('_pvpStyle'))return;
   var st=document.createElement('style');st.id='_pvpStyle';
   st.textContent=[
-    '#s-pvp,#s-pvp-battle{background:#000!important;}',
-    // (portrait rotate removed — handled by gate screen)
-    
-    
+    '#s-pvp{background:#000!important;font-family:"IBM Plex Mono",monospace!important;}',
+    '#s-pvp-battle{background:#000!important;}',
+
     '#pvpCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;}',
     '.pvp-btn{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:700;letter-spacing:2px;border:none;border-radius:4px;cursor:pointer;padding:12px 20px;-webkit-tap-highlight-color:transparent;}',
-    '.pvp-wpn-btn{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:700;border-radius:4px;cursor:pointer;padding:8px 6px;border:1px solid rgba(0,255,136,0.2);background:rgba(0,255,136,0.05);color:rgba(0,255,136,0.5);flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;-webkit-tap-highlight-color:transparent;transition:all .15s;}',
-    '.pvp-wpn-btn.active{border-color:#00ff88;background:rgba(0,255,136,0.15);color:#00ff88;box-shadow:0 0 8px rgba(0,255,136,0.3);}',
-    '.pvp-ctrl-btn{display:flex;align-items:center;justify-content:center;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:4px;font-size:20px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;}',
+    '.pvp-wpn-btn{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;padding:8px 6px;border:1px solid rgba(0,255,136,0.35);background:rgba(0,10,6,0.72);color:rgba(0,255,136,0.6);flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;-webkit-tap-highlight-color:transparent;transition:all .15s;backdrop-filter:blur(4px);}',
+    '.pvp-wpn-btn.active{border-color:#00ff88;background:rgba(0,255,136,0.12);color:#00ff88;box-shadow:0 0 10px rgba(0,255,136,0.45),inset 0 0 8px rgba(0,255,136,0.08);}',
+    '.pvp-ctrl-btn{display:flex;align-items:center;justify-content:center;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:6px;font-size:20px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;}',
+
+    /* ── keyframes ── */
     '@keyframes pvpPhase{0%{opacity:0;transform:scale(0.5)}50%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1)}}',
-    '@keyframes pvpBlockPulse{0%,100%{box-shadow:0 0 8px rgba(0,150,255,0.3)}50%{box-shadow:0 0 20px rgba(0,150,255,0.8)}}',
+    '@keyframes pvpNeonPulse{0%,100%{box-shadow:0 0 6px rgba(0,255,136,0.5),0 0 14px rgba(0,255,136,0.2),inset 0 0 6px rgba(0,255,136,0.06)}50%{box-shadow:0 0 10px rgba(0,255,136,0.8),0 0 22px rgba(0,255,136,0.35),inset 0 0 10px rgba(0,255,136,0.12)}}',
+    '@keyframes pvpBlockPulse{0%,100%{border-color:rgba(60,160,255,0.5);box-shadow:0 0 8px rgba(60,160,255,0.4),inset 0 0 6px rgba(60,160,255,0.08)}50%{border-color:rgba(120,200,255,0.9);box-shadow:0 0 16px rgba(60,160,255,0.7),0 0 30px rgba(60,160,255,0.25),inset 0 0 12px rgba(60,160,255,0.15)}}',
     '.pvp-block-active{animation:pvpBlockPulse 0.5s infinite!important;}',
+
+    /* ── layout (unchanged) ── */
+    '#pvpControls{position:absolute;bottom:0;left:0;right:0;height:96px;pointer-events:none;z-index:20;}',
+    '#pvpCtrlLeft{position:absolute;bottom:10px;left:8px;display:flex;gap:6px;pointer-events:auto;}',
+    '#pvpCtrlRight{position:absolute;bottom:10px;right:8px;display:flex;flex-direction:row;align-items:flex-end;gap:6px;pointer-events:auto;}',
+    '#pvpCtrlSecondary{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:5px;pointer-events:auto;}',
+
+    /* ── move buttons — neon green outline ── */
+    '.pvp-move-btn{'+
+      'width:58px;height:58px;border-radius:50%;'+
+      'background:rgba(0,8,4,0.68);'+
+      'border:1.5px solid rgba(0,255,136,0.45);'+
+      'box-shadow:0 0 8px rgba(0,255,136,0.30),0 0 18px rgba(0,255,136,0.10),inset 0 0 8px rgba(0,255,136,0.05);'+
+      'font-size:22px;color:rgba(0,255,136,0.70);'+
+      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'backdrop-filter:blur(6px);transition:box-shadow .08s,background .08s;}',
+    '.pvp-move-btn:active{'+
+      'background:rgba(0,255,136,0.14);'+
+      'border-color:rgba(0,255,136,0.95);'+
+      'box-shadow:0 0 14px rgba(0,255,136,0.75),0 0 28px rgba(0,255,136,0.30),inset 0 0 12px rgba(0,255,136,0.15);'+
+      'color:#00ff88;transform:scale(0.93);}',
+
+    /* ── attack button — bigger neon, red accent ── */
+    '.pvp-atk-btn{'+
+      'width:78px;height:78px;border-radius:50%;'+
+      'background:rgba(6,0,2,0.72);'+
+      'border:2px solid rgba(255,60,80,0.60);'+
+      'box-shadow:0 0 10px rgba(255,60,80,0.35),0 0 24px rgba(255,60,80,0.12),inset 0 0 10px rgba(255,60,80,0.06);'+
+      'font-size:32px;'+
+      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'backdrop-filter:blur(6px);transition:box-shadow .08s,background .08s;}',
+    '.pvp-atk-btn:active{'+
+      'background:rgba(255,60,80,0.18);'+
+      'border-color:rgba(255,80,100,0.98);'+
+      'box-shadow:0 0 18px rgba(255,60,80,0.80),0 0 36px rgba(255,60,80,0.35),inset 0 0 14px rgba(255,60,80,0.18);'+
+      'transform:scale(0.90);}',
+
+    /* ── secondary (jump / block) — neon green smaller ── */
+    '.pvp-sec-btn{'+
+      'width:40px;height:40px;border-radius:50%;'+
+      'background:rgba(0,8,4,0.65);'+
+      'border:1.5px solid rgba(0,255,136,0.38);'+
+      'box-shadow:0 0 6px rgba(0,255,136,0.22),inset 0 0 5px rgba(0,255,136,0.04);'+
+      'font-size:16px;color:rgba(0,255,136,0.65);'+
+      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'backdrop-filter:blur(5px);transition:box-shadow .08s,background .08s;}',
+    '.pvp-sec-btn:active{'+
+      'background:rgba(0,255,136,0.16);'+
+      'border-color:rgba(0,255,136,0.95);'+
+      'box-shadow:0 0 12px rgba(0,255,136,0.65),0 0 22px rgba(0,255,136,0.22),inset 0 0 10px rgba(0,255,136,0.12);'+
+      'color:#00ff88;transform:scale(0.91);}',
+
+    /* ── weapon selector mini buttons ── */
+    '.pvp-wpn-mini{'+
+      'width:36px;height:36px;border-radius:50%;'+
+      'background:rgba(0,8,4,0.62);'+
+      'border:1.5px solid rgba(0,255,136,0.28);'+
+      'box-shadow:0 0 4px rgba(0,255,136,0.14);'+
+      'font-size:15px;'+
+      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'transition:all .12s;opacity:0.6;backdrop-filter:blur(4px);}',
+    '.pvp-wpn-mini.active{'+
+      'opacity:1;'+
+      'border-color:rgba(0,255,136,0.90);'+
+      'background:rgba(0,255,136,0.13);'+
+      'box-shadow:0 0 10px rgba(0,255,136,0.55),0 0 20px rgba(0,255,136,0.18),inset 0 0 8px rgba(0,255,136,0.10);'+
+      'animation:pvpNeonPulse 2s ease-in-out infinite;}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -292,104 +478,47 @@ function _pvpStartBoss(){
   return;
 }
 
-// ── Экран поворота (как в референсе) ─────────────────────────────
+// ── Ориентация: игра только в портрете ───────────────────────────
 function _pvpShowOrientationGate(onReady) {
-  // Inject styles once
-  if(!document.getElementById('_pvpGateStyle')){
-    var _gs=document.createElement('style');
-    _gs.id='_pvpGateStyle';
-    _gs.textContent=[
-      '@keyframes pvpPhoneRock{',
-        '0%{transform:rotate(0deg);}',
-        '30%{transform:rotate(-80deg);}',
-        '60%{transform:rotate(-80deg);}',
-        '90%{transform:rotate(0deg);}',
-        '100%{transform:rotate(0deg);}',
-      '}',
-      '@keyframes pvpGateFadeIn{from{opacity:0}to{opacity:1}}',
-      '@keyframes pvpGateFadeOut{from{opacity:1}to{opacity:0;pointer-events:none}}',
-      '#pvpOrientGate{',
-        'position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;',
-        'background:radial-gradient(ellipse at 70% 60%,rgba(120,20,0,0.55) 0%,#000 65%);',
-        'display:flex;flex-direction:column;align-items:center;justify-content:center;',
-        'gap:0;animation:pvpGateFadeIn .3s ease;',
-      '}',
-      '#pvpOrientGate .og-icon-wrap{',
-        'width:80px;height:80px;margin-bottom:28px;',
-        'animation:pvpPhoneRock 2s ease-in-out infinite;',
-      '}',
-      '#pvpOrientGate .og-icon-wrap svg{width:80px;height:80px;}',
-      '#pvpOrientGate .og-title{',
-        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
-        'font-size:22px;font-weight:800;color:#fff;text-align:center;',
-        'line-height:1.3;padding:0 32px;margin-bottom:32px;',
-      '}',
-      '#pvpOrientGate .og-btn{',
-        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
-        'font-size:16px;font-weight:700;color:#000;',
-        'background:#fff;border:none;border-radius:50px;',
-        'padding:14px 44px;cursor:pointer;',
-        '-webkit-tap-highlight-color:transparent;',
-        'box-shadow:0 4px 20px rgba(255,255,255,0.15);',
-      '}',
-      // В landscape — скрываем gate автоматически
-      '@media(orientation:landscape){#pvpOrientGate{display:none!important;}}',
-    ].join('');
-    document.head.appendChild(_gs);
-  }
-
-  // Убираем старый gate если есть
+  // Убираем старый оверлей если есть
   var _old=document.getElementById('pvpOrientGate');
   if(_old)_old.parentNode.removeChild(_old);
 
-  // Уже landscape — сразу запускаем, без gate
-  if(window.matchMedia('(orientation:landscape)').matches){
+  // Уже портрет — сразу запускаем
+  if(window.innerHeight >= window.innerWidth){
     onReady();
     return;
   }
 
-  var _gate=document.createElement('div');
-  _gate.id='pvpOrientGate';
-  _gate.innerHTML=
-    '<div class="og-icon-wrap">'+
-      '<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">'+
-        // Стрелка сверху-слева
-        '<path d="M22 14 C10 14 6 26 6 38" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>'+
-        '<polyline points="14,8 22,14 16,22" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'+
-        // Телефон (вертикальный прямоугольник)
-        '<rect x="26" y="16" width="28" height="48" rx="5" stroke="white" stroke-width="3.5" fill="none"/>'+
-        '<circle cx="40" cy="58" r="2.5" fill="white"/>'+
-        // Стрелка снизу-справа
-        '<path d="M58 66 C70 66 74 54 74 42" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>'+
-        '<polyline points="66,72 58,66 64,58" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'+
-      '</svg>'+
-    '</div>'+
-    '<div class="og-title">Turn your phone<br>sideways for the best<br>game experience</div>'+
-    '<button class="og-btn" id="pvpOrientPlayBtn">Let&#39;s play</button>';
-
-  document.body.appendChild(_gate);
-
-  function _dismiss(){
-    _gate.style.animation='pvpGateFadeOut .25s ease forwards';
-    setTimeout(function(){
-      if(_gate.parentNode)_gate.parentNode.removeChild(_gate);
-      onReady();
-    },250);
+  // Landscape — показываем оверлей "поверни обратно"
+  if(!document.getElementById('_pvpGateStyle')){
+    var _gs=document.createElement('style');
+    _gs.id='_pvpGateStyle';
+    _gs.textContent=
+      '@keyframes pvpPhoneRock{0%{transform:rotate(90deg)}40%{transform:rotate(80deg)}60%{transform:rotate(80deg)}100%{transform:rotate(90deg)}}'
+      +'@keyframes pvpGateFadeIn{from{opacity:0}to{opacity:1}}'
+      +'#pvpOrientGate{position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;animation:pvpGateFadeIn .3s ease;}'
+      +'#pvpOrientGate .og-icon{font-size:72px;margin-bottom:24px;animation:pvpPhoneRock 1.5s ease-in-out infinite;display:inline-block;}'
+      +'#pvpOrientGate .og-title{font-family:-apple-system,sans-serif;font-size:20px;font-weight:800;color:#fff;text-align:center;line-height:1.4;padding:0 32px;}';
+    document.head.appendChild(_gs);
   }
 
-  document.getElementById('pvpOrientPlayBtn').addEventListener('click',_dismiss);
+  var _gate=document.createElement('div');
+  _gate.id='pvpOrientGate';
+  _gate.innerHTML='<div class="og-icon">📱</div><div class="og-title">Поверни телефон<br>вертикально</div>';
+  document.body.appendChild(_gate);
 
-  // Бонус: авто-скрыть при повороте (работает вне TG; в TG кнопка Let's play основной способ)
-  try{
-    var _mql=window.matchMedia('(orientation:landscape)');
-    function _onOrient(e){
-      if(e.matches){
-        try{_mql.removeEventListener('change',_onOrient);}catch(e2){}
-        _dismiss();
-      }
+  // Авто-скрыть когда вернули портрет
+  var _mql=window.matchMedia('(orientation:portrait)');
+  function _onOrient(e){
+    if(e.matches){
+      try{_mql.removeEventListener('change',_onOrient);}catch(e2){}
+      var g=document.getElementById('pvpOrientGate');
+      if(g)g.parentNode.removeChild(g);
+      onReady();
     }
-    _mql.addEventListener('change',_onOrient);
-  }catch(e){}
+  }
+  try{_mql.addEventListener('change',_onOrient);}catch(e){}
 }
 
 // ── Реальный запуск боя (после gate) ─────────────────────────────
@@ -413,111 +542,118 @@ function _pvpLaunchBattle() {
   _pvp.over=false;_pvp.won=false;_pvp.startTime=Date.now();
   _pvp.phase=0;_pvp.phaseShown=-1;_pvp.blocking=false;
   _pvp.lastFrame=Date.now();_pvp.screenShake=0;
-  _dmgNums=[];_pvpMoveDir=0;_pvp.camX=0;
+  _pvp.bossHitFlash=0;_pvp.playerHitFlash=0;_pvp.impactRings=[];_pvp.screenRedFlash=0;
+  _dmgNums=[];_pvpMoveDir=0;_pvp.camX=0;_slashFX=[];
+  _bossAnim.cur='walk';_bossAnim.frameIdx=0;_bossAnim.timer=0;_bossAnim.onDone=null;_bossAnim.locked=false;
   _bossPlayAnim('walk');
 
-  // ── HUD КАК НА РЕФЕРЕНСЕ ────────────────────────────────────────
-  var _hudH=44, _ctrlH=72;
+  // ── HUD + КОНТРОЛЫ КАК НА МАКЕТЕ ───────────────────────────────
+  var _hudH=52, _ctrlH=0;  // контролы теперь overlay, не занимают высоту
 
-  inner.innerHTML=[
-    // HUD верхний: [аватар игрока | HP | VS | HP | аватар босса]
-    '<div id="pvpHUD" style="display:flex;align-items:center;gap:8px;padding:4px 10px;flex-shrink:0;background:rgba(0,0,0,0.88);border-bottom:1px solid rgba(0,255,136,0.08);height:'+_hudH+'px;box-sizing:border-box;">',
-    // Левая часть
-    '<div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">',
-      '<div style="width:34px;height:34px;flex-shrink:0;border:2px solid #00ff88;border-radius:4px;background:#1a3a18;display:flex;align-items:center;justify-content:center;overflow:hidden;">',
-        '<svg width="26" height="26" viewBox="0 0 16 16" style="image-rendering:pixelated;"><rect x="5" y="1" width="6" height="6" fill="#3d8b37"/><rect x="4" y="2" width="2" height="3" fill="#2a5c26"/><rect x="5" y="7" width="6" height="5" fill="#2a5c26"/><rect x="4" y="9" width="2" height="3" fill="#3d8b37"/><rect x="10" y="9" width="2" height="3" fill="#3d8b37"/><rect x="5" y="12" width="2" height="4" fill="#1e4a1a"/><rect x="9" y="12" width="2" height="4" fill="#1e4a1a"/><rect x="5" y="3" width="2" height="2" fill="#ffdd00"/><rect x="9" y="3" width="2" height="2" fill="#ffdd00"/></svg>',
-      '</div>',
-      '<div style="flex:1;min-width:0;">',
-        '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">',
-          '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:#00ff88;letter-spacing:1px;font-weight:700;">ВЫ</div>',
-          '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:7px;color:rgba(0,255,136,0.4);">LV.1</div>',
-          '<div id="pvpBlockIcon" style="font-size:9px;opacity:0;">🛡</div>',
-        '</div>',
-        '<div style="height:7px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin-bottom:1px;">',
-          '<div id="pvpPlayerHP" style="height:100%;background:linear-gradient(90deg,#00ff88,#00cc6a);width:100%;transition:width .2s;border-radius:2px;"></div>',
-        '</div>',
-        '<div id="pvpPlayerHPTxt" style="font-family:\'IBM Plex Mono\',monospace;font-size:8px;color:rgba(0,255,136,0.6);">100/100</div>',
-      '</div>',
-    '</div>',
-    // VS
-    '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:rgba(255,255,255,0.3);flex-shrink:0;padding:0 8px;">VS</div>',
-    // Правая часть
-    '<div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;justify-content:flex-end;">',
-      '<div style="flex:1;min-width:0;text-align:right;">',
-        '<div id="pvpBossNameHUD" style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:#cc4400;letter-spacing:1px;font-weight:700;margin-bottom:1px;">ТРОЛЛЬ</div>',
-        '<div style="height:7px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin-bottom:1px;">',
-          '<div id="pvpBossHP" style="height:100%;background:linear-gradient(90deg,#e74c3c,#c0392b);width:100%;transition:width .2s;border-radius:2px;"></div>',
-        '</div>',
-        '<div id="pvpBossHPTxt" style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:rgba(231,76,60,0.6);">',bd.hp,'/',bd.hp,'</div>',
-      '</div>',
-      '<div style="width:34px;height:34px;flex-shrink:0;border:2px solid #cc4400;border-radius:4px;background:#1a0a00;display:flex;align-items:center;justify-content:center;font-size:22px;">👹</div>',
-    '</div>',
-    '</div>',
+  inner.innerHTML = (
+    // ── HUD ──────────────────────────────────────────────────────────
+    '<div id="pvpHUD" style="display:flex;align-items:center;gap:8px;padding:6px 12px;flex-shrink:0;background:rgba(0,0,0,0.92);border-bottom:1px solid rgba(0,255,136,0.12);height:'+_hudH+'px;box-sizing:border-box;">'
+    +'<div style="width:40px;height:40px;flex-shrink:0;border:2px solid #00ff88;border-radius:6px;background:#0d1f0c;display:flex;align-items:center;justify-content:center;overflow:hidden;"><svg width="30" height="30" viewBox="0 0 16 16" style="image-rendering:pixelated;"><rect x="5" y="1" width="6" height="6" fill="#3d8b37"/><rect x="4" y="2" width="2" height="3" fill="#2a5c26"/><rect x="5" y="7" width="6" height="5" fill="#2a5c26"/><rect x="4" y="9" width="2" height="3" fill="#3d8b37"/><rect x="10" y="9" width="2" height="3" fill="#3d8b37"/><rect x="5" y="12" width="2" height="4" fill="#1e4a1a"/><rect x="9" y="12" width="2" height="4" fill="#1e4a1a"/><rect x="5" y="3" width="2" height="2" fill="#ffdd00"/><rect x="9" y="3" width="2" height="2" fill="#ffdd00"/></svg></div>'
+    +'<div style="flex:1;min-width:0;">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;"><span style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:#00ff88;font-weight:700;">YOU</span><span style="font-family:\'IBM Plex Mono\',monospace;font-size:8px;color:rgba(0,255,136,0.45);">LV.1</span><div id="pvpBlockIcon" style="font-size:9px;opacity:0;">🛡</div></div>'
+      +'<div style="height:9px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-bottom:2px;"><div id="pvpPlayerHP" style="height:100%;background:linear-gradient(90deg,#00ff88,#00cc6a);width:100%;transition:width .2s;border-radius:3px;"></div></div>'
+      +'<div id="pvpPlayerHPTxt" style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:rgba(0,255,136,0.7);">100/100</div>'
+    +'</div>'
+    +'<div style="font-family:\'IBM Plex Mono\',monospace;font-size:13px;color:rgba(255,255,255,0.25);flex-shrink:0;padding:0 6px;">VS</div>'
+    +'<div style="flex:1;min-width:0;text-align:right;">'
+      +'<div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:2px;"><span id="pvpBossNameHUD" style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:#e74c3c;font-weight:700;">ТРОЛЛЬ</span></div>'
+      +'<div style="height:9px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-bottom:2px;"><div id="pvpBossHP" style="height:100%;background:linear-gradient(90deg,#e74c3c,#c0392b);width:100%;transition:width .2s;border-radius:3px;"></div></div>'
+      +'<div id="pvpBossHPTxt" style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:rgba(231,76,60,0.7);">'+bd.hp+'/'+bd.hp+'</div>'
+    +'</div>'
+    +'<div style="width:40px;height:40px;flex-shrink:0;border:2px solid #e74c3c;border-radius:6px;background:#1a0a00;display:flex;align-items:center;justify-content:center;font-size:24px;">👹</div>'
+    +'</div>'
     // Phase banner
-    '<div id="pvpPhaseBanner" style="position:absolute;top:48px;left:0;right:0;text-align:center;pointer-events:none;z-index:10;display:none;">',
-      '<div style="display:inline-block;font-family:\'IBM Plex Mono\',monospace;font-size:18px;font-weight:700;letter-spacing:4px;color:#ff4400;text-shadow:0 0 20px rgba(255,68,0,0.8);background:rgba(0,0,0,0.8);border:1px solid rgba(255,68,0,0.4);border-radius:4px;padding:6px 16px;" id="pvpPhaseTxt">PHASE 2</div>',
-    '</div>',
-    // Canvas
-    '<canvas id="pvpCanvas" style="flex:1;width:100%;display:block;image-rendering:pixelated;touch-action:none;"></canvas>',
-    // Контролы нижние
-    _pvpBuildWeaponBtns()+
-    '<div id="pvpControls" style="display:flex;align-items:center;justify-content:space-between;padding:4px 10px;flex-shrink:0;background:rgba(8,8,8,0.97);border-top:1px solid rgba(255,255,255,0.05);height:'+_ctrlH+'px;box-sizing:border-box;">'+
-      '<div style="display:flex;gap:5px;align-items:center;">'+
-        '<button style="width:56px;height:56px;background:rgba(50,50,50,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:22px;color:#ccc;cursor:pointer;-webkit-tap-highlight-color:transparent;" onpointerdown="_pvpMove(-1)" onpointerup="_pvpStopMove()" onpointercancel="_pvpStopMove()">&#9664;</button>'+
-        '<button style="width:56px;height:56px;background:rgba(50,50,50,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:22px;color:#ccc;cursor:pointer;-webkit-tap-highlight-color:transparent;" onpointerdown="_pvpMove(1)" onpointerup="_pvpStopMove()" onpointercancel="_pvpStopMove()">&#9654;</button>'+
-      '</div>'+
-      '<div id="pvpWpnRow" style="display:flex;gap:4px;align-items:center;"></div>'+
-      '<div style="display:flex;align-items:center;gap:8px;">'+
-        '<button style="width:44px;height:44px;background:rgba(30,30,30,0.85);border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-size:18px;cursor:pointer;-webkit-tap-highlight-color:transparent;">💀</button>'+
-        '<button style="width:68px;height:68px;background:linear-gradient(145deg,#e74c3c,#c0392b);border:none;border-radius:50%;font-size:28px;cursor:pointer;box-shadow:0 0 24px rgba(231,76,60,0.7),0 4px 12px rgba(0,0,0,0.5);-webkit-tap-highlight-color:transparent;" onpointerdown="_pvpAttack()">&#9876;</button>'+
-        '<button style="width:44px;height:44px;background:rgba(50,50,50,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:18px;color:#ccc;cursor:pointer;-webkit-tap-highlight-color:transparent;" onpointerdown="_pvpJump()">&#11014;</button>'+
-      '</div>'+
-    '</div>',
-  ].join('');
+    +'<div id="pvpPhaseBanner" style="position:absolute;top:56px;left:0;right:0;text-align:center;pointer-events:none;z-index:10;display:none;"><div id="pvpPhaseTxt" style="display:inline-block;font-family:\'IBM Plex Mono\',monospace;font-size:18px;font-weight:700;letter-spacing:4px;color:#ff4400;text-shadow:0 0 20px rgba(255,68,0,0.8);background:rgba(0,0,0,0.8);border:1px solid rgba(255,68,0,0.4);border-radius:4px;padding:6px 16px;">PHASE 2</div></div>'
+    // Canvas (absolute, fills container)
+    +'<canvas id="pvpCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;"></canvas>'
+    // Overlay controls
+    +'<div id="pvpControls">'
+      // Левый кластер — движение
+      +'<div id="pvpCtrlLeft">'
+        +'<button class="pvp-move-btn" onpointerdown="_pvpMove(-1)" onpointerup="_pvpStopMove()" onpointercancel="_pvpStopMove()">&#9664;</button>'
+        +'<button class="pvp-move-btn" onpointerdown="_pvpMove(1)" onpointerup="_pvpStopMove()" onpointercancel="_pvpStopMove()">&#9654;</button>'
+      +'</div>'
+      // Центр — оружия (мини)
+      +'<div id="pvpWpnRow" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto;"></div>'
+      // Правый кластер — secondary + атака
+      +'<div id="pvpCtrlRight">'
+        +'<div style="display:flex;flex-direction:column;gap:6px;align-items:center;">'
+          +'<button id="pvpBlockBtn" class="pvp-sec-btn" onpointerdown="_pvpBlockStart()" onpointerup="_pvpBlockEnd()" onpointercancel="_pvpBlockEnd()">&#128737;</button>'
+          +'<button class="pvp-sec-btn" onpointerdown="_pvpJump()">&#11014;</button>'
+        +'</div>'
+        +'<button class="pvp-atk-btn" onpointerdown="_pvpAttack()">&#9876;</button>'
+      +'</div>'
+    +'</div>'
+  );
 
-  // ── TG-совместимый запуск ────────────────────────────────────────
-  // В Telegram WebApp нельзя position:fixed — используем flex на всю высоту
-  var _battleScreen=document.getElementById('s-pvp-battle');
-  if(_battleScreen){
-    _battleScreen.style.display='flex';
-    _battleScreen.style.flexDirection='column';
-    _battleScreen.style.width='100%';
-    _battleScreen.style.height='100%';
-    _battleScreen.style.overflow='hidden';
-    _battleScreen.style.background='#000';
+  // Заполняем кнопки оружий (мини, круглые)
+  setTimeout(function(){
+    var row = document.getElementById('pvpWpnRow');
+    if(!row) return;
+    var html = '';
+    Object.keys(PVP_WEAPONS).forEach(function(k){
+      var w = PVP_WEAPONS[k];
+      var active = _pvp.weapon===k ? ' active' : '';
+      html += '<button id="wpnBtn_'+k+'" class="pvp-wpn-mini'+active+'" onclick="_pvpSwitchWeapon(\''+k+'\')">'+w.emoji+'</button>';
+    });
+    // Блок теперь в правом кластере — из wpnRow убираем
+    row.innerHTML = html;
+  }, 0);
+
+  // ── Запуск: растягиваем экран и canvas на всю высоту окна ─────────
+  var _battleScreen = document.getElementById('s-pvp-battle');
+  if (_battleScreen) {
+    _battleScreen.style.display        = 'flex';
+    _battleScreen.style.flexDirection  = 'column';
+    _battleScreen.style.width          = '100%';
+    _battleScreen.style.height         = '100%';
+    _battleScreen.style.overflow       = 'hidden';
+    _battleScreen.style.background     = '#000';
   }
-  inner.style.display='flex';
-  inner.style.flexDirection='column';
-  inner.style.width='100%';
-  inner.style.height='100%';
-  inner.style.flex='1';
-  inner.style.overflow='hidden';
+  inner.style.display       = 'flex';
+  inner.style.flexDirection = 'column';
+  inner.style.width         = '100%';
+  inner.style.height        = '100%';
+  inner.style.flex          = '1';
+  inner.style.overflow      = 'hidden';
+  inner.style.position      = 'relative';
 
-  // Ждём 2 rAF — браузер/TG успевает отрендерить DOM и посчитать offsetHeight
+  // Ждём 2 rAF — DOM рендерится, потом замеряем
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
-      var canvas=document.getElementById('pvpCanvas');
-      var hud=document.getElementById('pvpHUD');
-      var ctrl=document.getElementById('pvpControls');
-      if(!canvas)return;
+      var canvas = document.getElementById('pvpCanvas');
+      var hud    = document.getElementById('pvpHUD');
+      var ctrl   = document.getElementById('pvpControls');
+      if (!canvas) return;
 
-      // TG: используем visualViewport если доступен (точнее чем innerHeight в TG)
-      var vvW = window.visualViewport ? window.visualViewport.width  : window.innerWidth;
-      var vvH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      // Ширина — всегда берём window.innerWidth (самый надёжный в TG/браузере)
+      var vvW = window.innerWidth;
+      // Высота контейнера
+      var vvH = inner.offsetHeight > 50 ? inner.offsetHeight
+               : (document.documentElement.clientHeight || window.innerHeight);
 
-      PVP_W = vvW;
       var _hudH  = hud  ? hud.offsetHeight  : 44;
-      var _ctrlH = ctrl ? ctrl.offsetHeight : 72;
-      var _canvasH = Math.max(vvH - _hudH - _ctrlH, 100);
+      var _canvasH = Math.max(vvH - _hudH, 120);  // контролы — overlay, не отнимают высоту
 
-      canvas.width  = PVP_W;
-      canvas.height = _canvasH;
-      // явно выставляем размер через style тоже
-      canvas.style.width  = PVP_W + 'px';
-      canvas.style.height = _canvasH + 'px';
+      // Растягиваем canvas на полную ширину экрана
       canvas.style.display = 'block';
+      canvas.style.position = 'relative';
+      canvas.style.left = '0';
+      canvas.width         = vvW;
+      canvas.height        = _canvasH;
+      canvas.style.width   = vvW + 'px';
+      canvas.style.height  = _canvasH + 'px';
 
-      PVP_FLOOR = Math.round(_canvasH * 0.82);
+      PVP_W   = vvW;
+      PVP_H   = _canvasH;
+      // В портрете делаем пол ниже (0.78) чтобы был виден край арены
+      var _isPortrait = _canvasH > vvW;
+      PVP_FLOOR = Math.round(_canvasH * (_isPortrait ? 0.78 : 0.72));
 
       _pvp.boss.x   = PVP_W * 0.78;
       _pvp.player.x = PVP_W * 0.18;
@@ -537,7 +673,7 @@ function _pvpLaunchBattle() {
 var _pvpMoveDir=0,_pvpMoveInterval=null;
 function _pvpMove(dir){if(_pvp.blocking)return;_pvpMoveDir=dir;if(_pvp.player)_pvp.player.dir=dir;}
 function _pvpStopMove(){_pvpMoveDir=0;if(_pvpMoveInterval){clearInterval(_pvpMoveInterval);_pvpMoveInterval=null;}if(_pvp.player)_pvp.player.state='idle';}
-function _pvpSwitchWeapon(key){_pvp.weapon=key;document.querySelectorAll('.pvp-wpn-btn').forEach(function(b){b.classList.toggle('active',b.id==='wpnBtn_'+key);});}
+function _pvpSwitchWeapon(key){_pvp.weapon=key;document.querySelectorAll('.pvp-wpn-mini').forEach(function(b){b.classList.toggle('active',b.id==='wpnBtn_'+key);});}
 function _pvpBlockStart(){if(_pvp.over)return;_pvpStopMove();_pvp.blocking=true;var b=document.getElementById('pvpBlockBtn');if(b)b.classList.add('pvp-block-active');var i=document.getElementById('pvpBlockIcon');if(i)i.style.opacity='1';}
 function _pvpBlockEnd(){_pvp.blocking=false;var b=document.getElementById('pvpBlockBtn');if(b)b.classList.remove('pvp-block-active');var i=document.getElementById('pvpBlockIcon');if(i)i.style.opacity='0';}
 function _pvpJump(){if(_pvp.over||!_pvp.player||!_pvp.player.onGround)return;_pvp.player.vy=-12;_pvp.player.onGround=false;}
@@ -552,12 +688,32 @@ function _pvpAttack(){
     _pvp.projectiles.push({x:px+(_pvp.player.dir>0?20:-20),y:_pvp.player.y-30,
       vx:px<bx?7:-7,vy:0,owner:'player',wpn:_pvp.weapon,color:wpn.color,r:5});
   } else {
+    // Точка кончика оружия (совпадает с _pvpDrawPlayer координатами)
+    var _slashX, _slashY;
+    if(_pvp.weapon==='sword'){
+      // Меч: x+14..17, tip y-38  (в системе координат с учётом dir)
+      _slashX = _pvp.player.x + _pvp.player.dir * 26;
+      _slashY = _pvp.player.y - 36;
+    } else if(_pvp.weapon==='scythe'){
+      // Коса: x+22, y-44 верхушка дуги
+      _slashX = _pvp.player.x + _pvp.player.dir * 32;
+      _slashY = _pvp.player.y - 44;
+    } else {
+      // Лук: x+16, y-24 середина лука
+      _slashX = _pvp.player.x + _pvp.player.dir * 28;
+      _slashY = _pvp.player.y - 28;
+    }
     if(dist<wpn.range){
       var dmg=_rnd(wpn.dmg[0],wpn.dmg[1]);
+      var isCrit = dmg >= wpn.dmg[1] - 2;
       _pvpDamageBoss(dmg,true);
       _pvpSpawnParticles(bx,_pvp.boss.y-40,wpn.color,10);
       _bossPlayAnim('hurt',function(){_bossPlayAnim('walk');});
-    } else {_pvpShowHint('Подойди ближе!');}
+      _spawnSlashFX(_slashX, _slashY, _pvp.player.dir, _pvp.weapon, isCrit);
+    } else {
+      _spawnSlashFX(_slashX, _slashY, _pvp.player.dir, _pvp.weapon, false);
+      _pvpShowHint('Подойди ближе!');
+    }
   }
 }
 
@@ -630,32 +786,55 @@ function _pvpDamageBoss(dmg,kb){
   _pvp.boss.hp=Math.max(0,_pvp.boss.hp-dmg);
   _pvpShowDmgNum(dmg,_pvp.boss.x,_pvp.boss.y-60,'#00ff88');
   _pvpUpdateHUD();
+  // ── Hit effects ──────────────────────────────────────────────────
+  _pvp.bossHitFlash=10;
+  _pvp.screenShake=Math.max(_pvp.screenShake,dmg>30?16:dmg>15?11:7);
+  if(_pvp.impactRings){
+    _pvp.impactRings.push({x:_pvp.boss.x,y:_pvp.boss.y-80,r:0,maxR:65,life:12,maxLife:12,color:'rgba(0,255,136,0.85)'});
+    if(dmg>20) _pvp.impactRings.push({x:_pvp.boss.x,y:_pvp.boss.y-80,r:0,maxR:38,life:8,maxLife:8,color:'rgba(255,255,255,0.6)'});
+  }
+  _pvpSpawnParticles(_pvp.boss.x,_pvp.boss.y-80,'#00ff88',8);
+  _pvpSpawnParticles(_pvp.boss.x,_pvp.boss.y-80,'#ffffff',5);
+  _pvpSpawnParticles(_pvp.boss.x,_pvp.boss.y-40,'#00ff88',4);
+  // ─────────────────────────────────────────────────────────────────
   if(kb){var dir=_pvp.boss.x>_pvp.player.x?1:-1;_pvp.boss.knockX=dir*60;}
   if(_pvp.boss.hp<=0){
     _bossPlayAnim('dead');
-    // Запускаем отдельный RAF для смерти после остановки основного
+    // Отдельный RAF для анимации смерти
     setTimeout(function(){
       if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
       PVP_RUNNING=false;
       var _deadStart=Date.now();
       var _deadCtx=_pvp.ctx,_deadCanvas=_pvp.canvas;
+      var _frozenCamX=Math.round(_pvp.camX); // фиксируем камеру
       function _deadLoop(){
         var _elapsed=Date.now()-_deadStart;
-        var _fi=Math.min(Math.floor(_elapsed/280),5);
+        var _fi=Math.min(Math.floor(_elapsed/180),5);
         var _img=BOSS_DEATH_FRAMES[_fi+1];
         if(_deadCtx&&_deadCanvas){
-          _deadCtx.clearRect(0,0,_deadCanvas.width,_deadCanvas.height);
-          _pvpDrawCaveBG(_deadCtx,_deadCanvas.width,_deadCanvas.height,Date.now());
+          var _W=_deadCanvas.width,_H=_deadCanvas.height;
+          _deadCtx.clearRect(0,0,_W,_H);
+          _pvpDrawCaveBG(_deadCtx,_W,_H,Date.now());
+          _deadCtx.fillStyle='rgba(0,0,0,0.62)';_deadCtx.fillRect(0,0,_W,_H);
+          _deadCtx.save();_deadCtx.translate(-_frozenCamX,0);
+          _pvpDrawFloor(_deadCtx,_W,_H);
+          _pvpDrawPlayer(_deadCtx,_pvp.player);
           if(_img){
-            var _bh=Math.round(PVP_FLOOR*0.55);
+            var _isLS=_W>_H;
+            var _bh=Math.round(_H*(_isLS?0.66:0.43));
             var _bw=Math.round(_img.naturalWidth*(_bh/_img.naturalHeight));
-            // Не больше половины экрана по ширине
-            if(_bw>_deadCanvas.width*0.5){var _s=(_deadCanvas.width*0.5)/_bw;_bw=Math.round(_bw*_s);_bh=Math.round(_bh*_s);}
+            if(_bw>_W*0.6){var _s=(_W*0.6)/_bw;_bw=Math.round(_bw*_s);_bh=Math.round(_bh*_s);}
+            var _fallProg=Math.min(1,_elapsed/900);
+            var _fallY=Math.round(_pvp.boss.y+_fallProg*(_bh*0.25));
+            var _alpha=Math.max(0,1-Math.max(0,_elapsed-600)/500);
+            _deadCtx.globalAlpha=_alpha;
             _deadCtx.drawImage(_img,0,0,_img.naturalWidth,_img.naturalHeight,
-              Math.round(_pvp.boss.x-_bw/2),Math.round(_pvp.boss.y-_bh),_bw,_bh);
+              Math.round(_pvp.boss.x-_bw/2),Math.round(_fallY-_bh),_bw,_bh);
+            _deadCtx.globalAlpha=1;
           }
+          _deadCtx.restore();
         }
-        if(_elapsed<1800){requestAnimationFrame(_deadLoop);}
+        if(_elapsed<1100){requestAnimationFrame(_deadLoop);}
         else{_pvpWin();}
       }
       requestAnimationFrame(_deadLoop);
@@ -668,7 +847,16 @@ function _pvpDamagePlayer(dmg){
   if(_pvp.blocking)dmg=Math.max(1,Math.round(dmg*0.20));
   _pvp.player.hp=Math.max(0,_pvp.player.hp-dmg);
   _pvpShowDmgNum(dmg,_pvp.player.x,_pvp.player.y-65,_pvp.blocking?'#4488ff':'#e74c3c');
-  _pvpUpdateHUD();_pvp.screenShake=_pvp.blocking?2:8;
+  _pvpUpdateHUD();_pvp.screenShake=_pvp.blocking?4:14;
+  _pvp.playerHitFlash=_pvp.blocking?6:14;
+  _pvp.screenRedFlash=_pvp.blocking?0:8; // red vignette on player hit
+  if(_pvp.impactRings){
+    var _rc=_pvp.blocking?'rgba(68,136,255,0.8)':'rgba(231,76,60,0.9)';
+    _pvp.impactRings.push({x:_pvp.player.x,y:_pvp.player.y-30,r:0,maxR:55,life:12,maxLife:12,color:_rc});
+    if(!_pvp.blocking) _pvp.impactRings.push({x:_pvp.player.x,y:_pvp.player.y-30,r:0,maxR:30,life:7,maxLife:7,color:'rgba(255,255,255,0.5)'});
+  }
+  _pvpSpawnParticles(_pvp.player.x,_pvp.player.y-30,_pvp.blocking?'#4488ff':'#e74c3c',_pvp.blocking?4:12);
+  _pvpSpawnParticles(_pvp.player.x,_pvp.player.y-50,_pvp.blocking?'#aaccff':'#ff6644',_pvp.blocking?0:5);
   if(_pvp.player.hp<=0)_pvpLose();
 }
 
@@ -694,37 +882,283 @@ function _pvpShowPhase(n){
 }
 
 var _dmgNums=[];
-function _pvpShowDmgNum(dmg,x,y,color){_dmgNums.push({val:dmg,x:x,y:y,vy:-1.8,life:55,maxLife:55,color:color});}
+function _pvpShowDmgNum(dmg,x,y,color){
+  var _crit=dmg>=30;
+  _dmgNums.push({
+    val:dmg, x:x+(Math.random()-0.5)*20, y:y,
+    vx:(Math.random()-0.5)*1.2,
+    vy:-3.2-Math.random()*1.5,
+    life:55, maxLife:55,
+    color:color, crit:_crit,
+    scale:_crit?2.0:1.2,
+    targetScale:_crit?1.4:1.0
+  });
+}
 function _pvpSpawnParticles(x,y,color,count){
-  for(var i=0;i<count;i++){var a=Math.random()*Math.PI*2;
-    _pvp.particles.push({x:x,y:y,vx:Math.cos(a)*(1+Math.random()*4),vy:Math.sin(a)*(1+Math.random()*4)-2,r:2+Math.random()*3,life:30+Math.random()*20,maxLife:50,color:color});}
+  for(var i=0;i<count;i++){
+    var a=Math.random()*Math.PI*2;
+    var spd=2+Math.random()*7;
+    _pvp.particles.push({
+      x:x,y:y,
+      vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-3,
+      r:1.5+Math.random()*4,
+      life:35+Math.random()*30, maxLife:65,
+      color:color
+    });
+  }
 }
 function _pvpShowHint(txt){if(typeof toast==='function')toast(txt,1000);}
+
+// ── REWARD SEQUENCE ───────────────────────────────────────────────
+var _rewardRAF = null;
+var _rewardParticles = [];
+var _rewardGifts = [];
+var _rewardState = { phase: 'idle', t: 0, flashAlpha: 0, titleScale: 0, titleAlpha: 0,
+  grinchY: 0, grinchAlpha: 0, grinchBounce: 0,
+  giftsPopped: 0, rewardItemsAlpha: [0,0], rewardItemsY: [0,0], done: false };
 
 function _pvpWin(){
   if(_pvp.won)return;
   _pvp.won=true;_pvp.over=true;PVP_RUNNING=false;
   if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
-  var boss=_pvp.boss.data,time=Math.floor((Date.now()-_pvp.startTime)/1000);
-  if(window.S){S.gifts=(S.gifts||0)+boss.reward.gifts;S.grinch=(S.grinch||0)+boss.reward.grinch;if(typeof save==='function')try{save();}catch(e){}}
-  setTimeout(function(){_pvpEndScreen(true,boss.reward,time);},700);
+  var boss=_pvp.boss.data, time=Math.floor((Date.now()-_pvp.startTime)/1000);
+  // Apply rewards to state (existing architecture untouched)
+  if(window.S){
+    S.gifts=(S.gifts||0)+boss.reward.gifts;
+    S.grinch=(S.grinch||0)+boss.reward.grinch;
+    if(typeof save==='function')try{save();}catch(e){}
+  }
+  // Inject reward overlay CSS once
+  if(!document.getElementById('_pvpRewardStyle')){
+    var _rs=document.createElement('style');_rs.id='_pvpRewardStyle';
+    _rs.textContent=[
+      '@keyframes _rwd_trophy{0%{transform:scale(0) rotate(-20deg)}60%{transform:scale(1.25) rotate(5deg)}80%{transform:scale(0.95) rotate(-2deg)}100%{transform:scale(1) rotate(0)}}',
+      '@keyframes _rwd_grinch{0%{transform:translateY(60px) scale(0.5);opacity:0}50%{transform:translateY(-12px) scale(1.08);opacity:1}70%{transform:translateY(4px) scale(0.97);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}',
+      '@keyframes _rwd_float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}',
+      '@keyframes _rwd_shimmer{0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5}}',
+      '@keyframes _rwd_chip_in{0%{transform:translateY(30px) scale(0.6);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}',
+      '@keyframes _rwd_btn_pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,0.4)}50%{box-shadow:0 0 0 10px rgba(0,255,136,0)}}',
+      '@keyframes _rwd_scanline{0%{transform:translateY(-100%)}100%{transform:translateY(200%)}}',
+      '@keyframes _rwd_giftpop{0%{transform:scale(0) rotate(-30deg);opacity:1}60%{transform:scale(1.3) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:0.85}}',
+      '._rwd_overlay{position:absolute;inset:0;z-index:100;overflow:hidden;pointer-events:none;}',
+      '._rwd_overlay.active{pointer-events:auto;}',
+      '._rwd_scanline_bar{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,255,136,0.4),transparent);animation:_rwd_scanline 2s linear infinite;pointer-events:none;}',
+    ].join('');
+    document.head.appendChild(_rs);
+  }
+  setTimeout(function(){ _pvpShowRewardSequence(boss.reward, time); }, 400);
 }
+
+function _pvpShowRewardSequence(reward, time) {
+  var inner = document.getElementById('pvpBattleInner');
+  if(!inner) return;
+
+  // ── Build overlay HTML ────────────────────────────────────────────
+  var ol = document.createElement('div');
+  ol.id = '_pvpRewardOverlay';
+  ol.className = '_rwd_overlay active';
+  ol.style.cssText = 'background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;';
+
+  ol.innerHTML = [
+    // Scanline effect
+    '<div class="_rwd_scanline_bar"></div>',
+    // Radial glow BG
+    '<div id="_rwd_bg" style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 60%,rgba(0,80,30,0.0),#000);transition:background 1.2s;pointer-events:none;"></div>',
+    // Gift explosion canvas
+    '<canvas id="_rwd_canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>',
+    // ── Content stack ─────────────────────────────────────────────────
+    '<div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:18px;padding:0 20px;width:100%;">',
+      // GRINCH token animation
+      '<div id="_rwd_grinch" style="opacity:0;font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:700;letter-spacing:3px;color:#00ff88;text-shadow:0 0 18px rgba(0,255,136,0.9);margin-bottom:-6px;">',
+        '<span id="_rwd_grinch_txt" style="display:inline-block;">+GRINCH</span>',
+      '</div>',
+      // Trophy + ПОБЕДА
+      '<div id="_rwd_trophy" style="font-size:72px;line-height:1;transform:scale(0);filter:drop-shadow(0 0 20px rgba(0,255,136,0.6));">🏆</div>',
+      '<div id="_rwd_title" style="font-family:\'IBM Plex Mono\',monospace;font-size:28px;font-weight:900;letter-spacing:5px;color:#00ff88;text-shadow:0 0 28px rgba(0,255,136,0.9),0 0 60px rgba(0,255,136,0.4);opacity:0;transform:scale(0.6);">ПОБЕДА!</div>',
+      // Time
+      '<div id="_rwd_time" style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:2px;opacity:0;">⏱ '+time+' СЕК</div>',
+      // Reward chips
+      '<div id="_rwd_chips" style="display:flex;gap:12px;margin-top:4px;">',
+        '<div id="_rwd_chip0" style="opacity:0;transform:translateY(30px) scale(0.6);font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:700;color:#00ff88;background:rgba(0,255,136,0.06);border:1.5px solid rgba(0,255,136,0.25);border-radius:8px;padding:12px 18px;text-align:center;min-width:90px;">',
+          '<div style="font-size:22px;margin-bottom:4px;">🎁</div>',
+          '<div>+'+reward.gifts+'</div>',
+        '</div>',
+        '<div id="_rwd_chip1" style="opacity:0;transform:translateY(30px) scale(0.6);font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:700;color:#ffd700;background:rgba(255,215,0,0.06);border:1.5px solid rgba(255,215,0,0.25);border-radius:8px;padding:12px 18px;text-align:center;min-width:90px;">',
+          '<div style="font-size:22px;margin-bottom:4px;">🟢</div>',
+          '<div>+'+reward.grinch+' GRINCH</div>',
+        '</div>',
+      '</div>',
+      // CTA buttons (appear last)
+      '<div id="_rwd_btns" style="opacity:0;display:flex;gap:8px;width:100%;max-width:320px;margin-top:8px;">',
+        '<button class="pvp-btn" onclick="_pvpStartBoss()" style="flex:1;background:linear-gradient(135deg,#00ff88,#00cc6a);color:#000;font-weight:900;animation:_rwd_btn_pulse 2s infinite;">🔄 СНОВА</button>',
+        '<button class="pvp-btn" onclick="_pvpGoMenu()" style="flex:1;background:transparent;color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.1);">🏠 МЕНЮ</button>',
+      '</div>',
+    '</div>',
+  ].join('');
+
+  inner.appendChild(ol);
+
+  // ── Setup canvas for gift explosion ──────────────────────────────
+  var rwdCanvas = document.getElementById('_rwd_canvas');
+  if(rwdCanvas){
+    rwdCanvas.width = inner.offsetWidth || window.innerWidth;
+    rwdCanvas.height = inner.offsetHeight || window.innerHeight;
+  }
+
+  // ── Animate sequence with timed steps ────────────────────────────
+  var _giftEmojis = ['🎁','🎀','🎊','⭐','🌟','✨','💫','🎁','🎁'];
+  var _gifts = [];
+  var _giftRAF = null;
+
+  function _spawnGiftBurst(cx, cy, count) {
+    for(var i=0;i<count;i++){
+      var angle = (Math.PI*2/count)*i + Math.random()*0.4;
+      var speed = 5 + Math.random()*8;
+      _gifts.push({
+        x:cx, y:cy,
+        vx:Math.cos(angle)*speed,
+        vy:Math.sin(angle)*speed - 4,
+        emoji:_giftEmojis[Math.floor(Math.random()*_giftEmojis.length)],
+        life:1.0, decay:0.012+Math.random()*0.008,
+        size:18+Math.floor(Math.random()*16),
+        rot:Math.random()*Math.PI*2,
+        rotV:(Math.random()-0.5)*0.18,
+        gravity:0.28
+      });
+    }
+  }
+
+  function _tickGifts() {
+    if(!rwdCanvas) return;
+    var ctx2 = rwdCanvas.getContext('2d');
+    ctx2.clearRect(0,0,rwdCanvas.width,rwdCanvas.height);
+    _gifts = _gifts.filter(function(g){
+      g.x += g.vx; g.y += g.vy; g.vy += g.gravity;
+      g.vx *= 0.98; g.rot += g.rotV; g.life -= g.decay;
+      if(g.life <= 0) return false;
+      ctx2.save();
+      ctx2.globalAlpha = Math.min(1, g.life * 2);
+      ctx2.translate(g.x, g.y);
+      ctx2.rotate(g.rot);
+      ctx2.font = g.size+'px serif';
+      ctx2.textAlign = 'center';
+      ctx2.textBaseline = 'middle';
+      ctx2.fillText(g.emoji, 0, 0);
+      ctx2.restore();
+      return true;
+    });
+    if(_gifts.length > 0) _giftRAF = requestAnimationFrame(_tickGifts);
+  }
+
+  // ── Timed reveal sequence (fast arcade style) ─────────────────────
+  var W2 = (rwdCanvas ? rwdCanvas.width : window.innerWidth);
+  var H2 = (rwdCanvas ? rwdCanvas.height : window.innerHeight);
+
+  // Phase 1 — 0ms: flash + gift burst
+  var _bg = document.getElementById('_rwd_bg');
+  if(_bg) _bg.style.background = 'radial-gradient(ellipse at 50% 55%,rgba(0,140,50,0.35),#000 70%)';
+  ol.style.background = 'rgba(255,255,255,0.15)';
+  setTimeout(function(){ ol.style.background='#000'; }, 80);
+  _spawnGiftBurst(W2*0.5, H2*0.45, 32);
+  _spawnGiftBurst(W2*0.15, H2*0.55, 8);
+  _spawnGiftBurst(W2*0.85, H2*0.55, 8);
+  _tickGifts();
+
+  // Phase 2 — 80ms: trophy pops in
+  setTimeout(function(){
+    var trophy = document.getElementById('_rwd_trophy');
+    if(trophy){ trophy.style.transition='transform 0.4s cubic-bezier(0.34,1.56,0.64,1)'; trophy.style.transform='scale(1)'; }
+  }, 80);
+
+  // Phase 3 — 280ms: ПОБЕДА! + second burst
+  setTimeout(function(){
+    var title = document.getElementById('_rwd_title');
+    if(title){ title.style.transition='all 0.35s cubic-bezier(0.34,1.56,0.64,1)'; title.style.opacity='1'; title.style.transform='scale(1)'; }
+    _spawnGiftBurst(W2*0.5, H2*0.4, 16);
+  }, 280);
+
+  // Phase 4 — 450ms: +GRINCH counter drops in
+  setTimeout(function(){
+    var gr = document.getElementById('_rwd_grinch');
+    if(gr){
+      gr.style.transition='none'; gr.style.opacity='0'; gr.style.transform='translateY(-30px)';
+      var _gEl = document.getElementById('_rwd_grinch_txt');
+      var _target = reward.grinch, _cur = 0, _step = Math.ceil(_target/12);
+      function _countUp(){ _cur=Math.min(_cur+_step,_target); if(_gEl)_gEl.textContent='+'+_cur+' GRINCH'; if(_cur<_target)setTimeout(_countUp,35); }
+      _countUp();
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        gr.style.transition='all 0.35s cubic-bezier(0.34,1.56,0.64,1)';
+        gr.style.opacity='1'; gr.style.transform='translateY(0)';
+      }); });
+    }
+  }, 450);
+
+  // Phase 5 — 550ms: time + both chips at once
+  setTimeout(function(){
+    var t2=document.getElementById('_rwd_time');
+    if(t2){t2.style.transition='opacity 0.3s';t2.style.opacity='1';}
+    var c0=document.getElementById('_rwd_chip0');
+    if(c0){c0.style.transition='all 0.38s cubic-bezier(0.34,1.56,0.64,1)';c0.style.opacity='1';c0.style.transform='translateY(0) scale(1)';}
+  }, 550);
+  setTimeout(function(){
+    var c1=document.getElementById('_rwd_chip1');
+    if(c1){c1.style.transition='all 0.38s cubic-bezier(0.34,1.56,0.64,1)';c1.style.opacity='1';c1.style.transform='translateY(0) scale(1)';}
+    _spawnGiftBurst(W2*0.5, H2*0.6, 14);
+  }, 680);
+
+  // Phase 6 — 900ms: buttons + final burst
+  setTimeout(function(){
+    var btns=document.getElementById('_rwd_btns');
+    if(btns){btns.style.transition='opacity 0.35s';btns.style.opacity='1';}
+    _spawnGiftBurst(W2*0.5, H2*0.5, 18);
+  }, 900);
+
+  // Float on trophy only (not chips — too distracting)
+  setTimeout(function(){
+    var t=document.getElementById('_rwd_trophy');
+    if(t) t.style.animation='_rwd_float 2s ease-in-out infinite';
+  }, 1300);
+}
+
 function _pvpLose(){
   if(_pvp.over)return;_pvp.over=true;PVP_RUNNING=false;
   if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
   setTimeout(function(){_pvpEndScreen(false,null,Math.floor((Date.now()-_pvp.startTime)/1000));},700);
 }
+
 function _pvpEndScreen(won,reward,time){
+  // Loss screen (win uses _pvpShowRewardSequence instead)
   var inner=document.getElementById('pvpBattleInner');if(!inner)return;
-  inner.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:24px;gap:16px;text-align:center;background:radial-gradient(circle at center,'+(won?'rgba(0,255,136,0.05)':'rgba(231,76,60,0.05)')+',#000);">'
-    +'<div style="font-size:72px;">'+(won?'🏆':'💀')+'</div>'
-    +'<div style="font-family:\'IBM Plex Mono\',monospace;font-size:26px;font-weight:700;letter-spacing:4px;color:'+(won?'#00ff88':'#e74c3c')+';text-shadow:0 0 24px '+(won?'rgba(0,255,136,0.8)':'rgba(231,76,60,0.8)')+';">'+(won?'ПОБЕДА!':'ПОРАЖЕНИЕ')+'</div>'
+  inner.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:24px;gap:16px;text-align:center;background:radial-gradient(circle at center,rgba(231,76,60,0.08),#000);">'
+    +'<div style="font-size:72px;animation:_rwd_float 2s ease-in-out infinite">💀</div>'
+    +'<div style="font-family:\'IBM Plex Mono\',monospace;font-size:26px;font-weight:700;letter-spacing:4px;color:#e74c3c;text-shadow:0 0 24px rgba(231,76,60,0.8);">ПОРАЖЕНИЕ</div>'
     +'<div style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:rgba(255,255,255,0.3);">⏱ '+time+' секунд</div>'
-    +(won&&reward?'<div style="display:flex;gap:10px;"><div style="font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:700;color:#00ff88;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:8px 14px;">🎁 +'+reward.gifts+'</div><div style="font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:700;color:#ffd700;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:4px;padding:8px 14px;">🟢 +'+reward.grinch+' GRINCH</div></div>':'')
     +'<div style="display:flex;gap:8px;width:100%;margin-top:8px;">'
-    +'<button class="pvp-btn" onclick="_pvpStartBoss()" style="flex:1;background:linear-gradient(135deg,#00ff88,#00cc6a);color:#000;font-weight:900;">🔄 СНОВА</button>'
-    +'<button class="pvp-btn" onclick="show(\'pvp\');" style="flex:1;background:transparent;color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1);">🏠 МЕНЮ</button>'
+    +'<button class="pvp-btn" onclick="_pvpStartBoss()" style="flex:1;background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;font-weight:900;">🔄 СНОВА</button>'
+    +'<button class="pvp-btn" onclick="_pvpGoMenu()" style="flex:1;background:transparent;color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1);">🏠 МЕНЮ</button>'
     +'</div></div>';
+}
+
+// Корректный выход в меню: останавливаем всё, чистим экран, потом show()
+function _pvpGoMenu(){
+  PVP_RUNNING=false;
+  if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
+  // Удаляем overlay
+  var ol=document.getElementById('_pvpRewardOverlay');
+  if(ol&&ol.parentNode)ol.parentNode.removeChild(ol);
+  // Чистим inner
+  var inner=document.getElementById('pvpBattleInner');
+  if(inner)inner.innerHTML='';
+  // Принудительно скрываем battle экран и показываем pvp меню
+  // — работает независимо от того как устроена show()
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  var pvpScreen=document.getElementById('s-pvp');
+  var battleScreen=document.getElementById('s-pvp-battle');
+  if(battleScreen){battleScreen.style.display='none';battleScreen.classList.remove('active');}
+  if(pvpScreen){pvpScreen.style.display='';pvpScreen.classList.add('active');}
+  // Также вызываем show() если есть — для обновления состояния меню
+  if(typeof show==='function')try{show('pvp');}catch(e){}
+  if(typeof updateMenu==='function')try{updateMenu();}catch(e){}
 }
 
 // ── ИГРОВОЙ ЦИКЛ ─────────────────────────────────────────────────
@@ -738,13 +1172,19 @@ function _pvpLoop(){
   var sx=0,sy2=0;
   if(_pvp.screenShake>0){sx=(Math.random()-0.5)*_pvp.screenShake;sy2=(Math.random()-0.5)*_pvp.screenShake;_pvp.screenShake=Math.max(0,_pvp.screenShake-1);}
   var _tcam=Math.min(0,_pvp.player.x-PVP_W*0.5);
-  _pvp.camX+=(_tcam-_pvp.camX)*0.12;
+  _pvp.camX+=(_tcam-_pvp.camX)*0.08;
   var _cx=Math.round(_pvp.camX);
-  ctx.save();ctx.translate(sx-_cx,sy2);ctx.clearRect(_cx-10,-10,W+20,H+20);
-
-  // ФОН ПЕЩЕРЫ
+  // Очищаем и рисуем фон БЕЗ сдвига камеры — фон всегда на весь canvas
+  ctx.save();
+  ctx.clearRect(0,0,W,H);
   _pvpDrawCaveBG(ctx,W,H,now);
-  _pvpDrawFloor(ctx,W,H);
+  // Лёгкое затемнение — арена читаема
+  ctx.fillStyle='rgba(0,0,0,0.22)';
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+
+  // Теперь применяем сдвиг камеры для игровых объектов
+  ctx.save();ctx.translate(sx-_cx,sy2);
 
   _pvpBossAI(now,dt);_bossTickAnim(dt);
 
@@ -786,29 +1226,149 @@ function _pvpLoop(){
   }
 
   _pvpDrawPlayer(ctx,_pvp.player);
-  if(_pvp.boss.hp>0||_bossAnim.cur==='dead')_bossDrawSprite(ctx,_pvp.boss.x,_pvp.boss.y);
-  if(_bossAnim.cur==='dead'){
-    ctx.save();
-    ctx.fillStyle='red';
-    ctx.font='bold 40px monospace';
-    ctx.fillText('DEAD fi='+_bossAnim.frameIdx+' f='+JSON.stringify(BOSS_DEATH_FRAMES.map(function(x){return x?1:0;})), 10, 100);
+
+  // ── Slash effects — спрайтовые эффекты удара ─────────────────────
+  _tickSlashFX(dt, ctx);
+
+  // ── Красная аура вокруг босса ────────────────────────────────────
+  if(_pvp.boss.hp>0&&_bossAnim.cur!=='dead'){
+    var _bax=_pvp.boss.x, _bay=_pvp.boss.y-80;
+    var _baPulse=0.18+Math.sin(now/300)*0.07;
+    var _baR=80+(_pvp.boss.phase||0)*20;
+    var _baGrad=ctx.createRadialGradient(_bax,_bay,10,_bax,_bay,_baR);
+    _baGrad.addColorStop(0,'rgba(200,30,0,'+_baPulse+')');
+    _baGrad.addColorStop(1,'rgba(200,30,0,0)');
+    ctx.save();ctx.globalCompositeOperation='screen';
+    ctx.fillStyle=_baGrad;ctx.fillRect(_bax-_baR,_bay-_baR,_baR*2,_baR*2);
     ctx.restore();
   }
 
+  if(_pvp.boss.hp>0||_bossAnim.cur==='dead')_bossDrawSprite(ctx,_pvp.boss.x,_pvp.boss.y);
 
+  // ── Lighting: dark overlay с radial light вокруг игрока ──────────
+  // Рисуем без camera offset (в screen space)
+  ctx.restore(); // закрываем camera translate
+  ctx.save();
+  ctx.translate(sx,sy2); // только shake, без camX
+  var _lx=_pvp.player.x-_cx, _ly=_pvp.player.y-40;
+  var _lRadius=W*0.45;
+  var _lGrad=ctx.createRadialGradient(_lx,_ly,20,_lx,_ly,_lRadius);
+  _lGrad.addColorStop(0,'rgba(0,0,0,0)');
+  _lGrad.addColorStop(0.55,'rgba(0,0,0,0.08)');
+  _lGrad.addColorStop(1,'rgba(0,0,0,0.35)');
+  ctx.fillStyle=_lGrad;
+  ctx.fillRect(-sx,  -sy2, W+Math.abs(sx)*2, H+Math.abs(sy2)*2);
+  ctx.restore();
+  // Восстанавливаем camera translate для оставшихся объектов (частицы, цифры)
+  ctx.save();ctx.translate(sx-_cx,sy2);
 
-  // Частицы
+  // ── Hit flash на боссе — radial burst ────────────────────────────
+  if(_pvp.bossHitFlash>0){
+    var _bfa=_pvp.bossHitFlash/10;
+    var _canvas=_pvp.canvas;
+    var _bHh=_canvas?Math.round(_canvas.height*(_canvas.width>_canvas.height?0.66:0.43)):80;
+    ctx.save();
+    var _bfg=ctx.createRadialGradient(_pvp.boss.x,_pvp.boss.y-_bHh*0.5,5,_pvp.boss.x,_pvp.boss.y-_bHh*0.5,_bHh*0.55);
+    _bfg.addColorStop(0,'rgba(255,255,255,'+(_bfa*0.7)+')');
+    _bfg.addColorStop(0.4,'rgba(180,255,180,'+(_bfa*0.3)+')');
+    _bfg.addColorStop(1,'rgba(0,255,136,0)');
+    ctx.fillStyle=_bfg;
+    ctx.fillRect(_pvp.boss.x-_bHh,_pvp.boss.y-_bHh*1.1,_bHh*2,_bHh*1.1);
+    ctx.restore();
+    _pvp.bossHitFlash--;
+  }
+  // ── Hit flash на игроке — radial burst ───────────────────────────
+  if(_pvp.playerHitFlash>0){
+    var _pfa=_pvp.playerHitFlash/14;
+    var _pfColor=_pvp.blocking?'rgba(100,160,255,':'rgba(255,60,40,';
+    ctx.save();
+    var _pfg=ctx.createRadialGradient(_pvp.player.x,_pvp.player.y-35,3,_pvp.player.x,_pvp.player.y-35,52);
+    _pfg.addColorStop(0,_pfColor+(_pfa*0.75)+')');
+    _pfg.addColorStop(1,_pfColor+'0)');
+    ctx.fillStyle=_pfg;
+    ctx.fillRect(_pvp.player.x-55,_pvp.player.y-90,110,90);
+    ctx.restore();
+    _pvp.playerHitFlash--;
+  }
+  // ── Red screen vignette on player hit ────────────────────────────
+  if(_pvp.screenRedFlash>0){
+    ctx.restore(); // exit camera space for full-screen effect
+    ctx.save();
+    var _rva=(_pvp.screenRedFlash/8)*0.38;
+    var _rvg=ctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.75);
+    _rvg.addColorStop(0,'rgba(180,0,0,0)');
+    _rvg.addColorStop(1,'rgba(200,0,0,'+_rva+')');
+    ctx.fillStyle=_rvg; ctx.fillRect(0,0,W,H);
+    ctx.restore();
+    ctx.save(); ctx.translate(sx-_cx,sy2); // back to camera space
+    _pvp.screenRedFlash--;
+  }
+  // ── Impact rings — dual line ──────────────────────────────────────
+  if(_pvp.impactRings){
+    _pvp.impactRings=_pvp.impactRings.filter(function(ring){
+      ring.r+=ring.maxR/ring.maxLife*2.2;
+      ring.life--;
+      if(ring.life<=0)return false;
+      var _ra=ring.life/ring.maxLife;
+      ctx.save();
+      ctx.globalAlpha=_ra*0.85;
+      ctx.strokeStyle=ring.color;
+      ctx.lineWidth=2.5*(1-_ra)+0.5;
+      ctx.beginPath();ctx.arc(ring.x,ring.y,ring.r,0,Math.PI*2);ctx.stroke();
+      // inner thin ring
+      if(ring.r>10){
+        ctx.globalAlpha=_ra*0.4;
+        ctx.lineWidth=1;
+        ctx.beginPath();ctx.arc(ring.x,ring.y,ring.r*0.6,0,Math.PI*2);ctx.stroke();
+      }
+      ctx.restore();
+      return true;
+    });
+  }
+  // ── Частицы — с glow ─────────────────────────────────────────────
   _pvp.particles=_pvp.particles.filter(function(p){
-    p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life--;if(p.life<=0)return false;
-    ctx.globalAlpha=p.life/p.maxLife;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.globalAlpha=1;return true;
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.22; p.vx*=0.96; p.life--;
+    if(p.life<=0)return false;
+    var _pa=p.life/p.maxLife;
+    ctx.save();
+    ctx.globalAlpha=_pa*_pa; // квадратичный fade — резче угасает
+    ctx.shadowColor=p.color; ctx.shadowBlur=p.r*2.5;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r*(0.5+_pa*0.5),0,Math.PI*2);
+    ctx.fillStyle=p.color; ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.restore();
+    return true;
   });
 
-  // Цифры урона
+  // ── Цифры урона — pop scale + crit style ─────────────────────────
   _dmgNums=_dmgNums.filter(function(d){
-    d.y+=d.vy;d.life--;if(d.life<=0)return false;
-    ctx.globalAlpha=d.life/d.maxLife;ctx.font='bold 15px "IBM Plex Mono",monospace';
-    ctx.fillStyle=d.color;ctx.shadowColor=d.color;ctx.shadowBlur=6;
-    ctx.fillText('-'+d.val,d.x-12,d.y);ctx.shadowBlur=0;ctx.globalAlpha=1;return true;
+    d.x+=d.vx; d.y+=d.vy; d.vy*=0.88; d.vx*=0.92; d.life--;
+    if(d.life<=0)return false;
+    var _da=d.life/d.maxLife;
+    // Scale: pop from big down to target
+    var _lifeRatio=d.life/d.maxLife;
+    d.scale+=(d.targetScale-d.scale)*0.18;
+    var _fadeAlpha=_lifeRatio<0.35?_lifeRatio/0.35:1;
+    ctx.save();
+    ctx.globalAlpha=_da*_fadeAlpha;
+    var _fs=d.crit?Math.round(26*d.scale):Math.round(16*d.scale);
+    ctx.font='900 '+_fs+'px "IBM Plex Mono",monospace';
+    ctx.textAlign='center';
+    ctx.shadowColor=d.color; ctx.shadowBlur=d.crit?20:10;
+    // thick black outline
+    ctx.strokeStyle='rgba(0,0,0,0.9)'; ctx.lineWidth=d.crit?5:3;
+    ctx.strokeText('-'+d.val,d.x,d.y);
+    ctx.fillStyle=d.crit?'#ffffff':d.color;
+    ctx.fillText('-'+d.val,d.x,d.y);
+    // crit: coloured shadow text underneath
+    if(d.crit){
+      ctx.globalAlpha=_da*_fadeAlpha*0.6;
+      ctx.fillStyle=d.color;
+      ctx.fillText('-'+d.val,d.x+2,d.y+2);
+    }
+    ctx.shadowBlur=0; ctx.textAlign='left';
+    ctx.restore();
+    return true;
   });
 
   ctx.restore();
@@ -816,138 +1376,419 @@ function _pvpLoop(){
 }
 
 // ── ПЕЩЕРНЫЙ ФОН ─────────────────────────────────────────────────
+// ── ФОН картинка ─────────────────────────────────────────────────
+var _pvpBgImg = null;
+(function(){
+  var img = new Image();
+  img.onload = function(){ _pvpBgImg = img; };
+  img.onerror = function(){ console.warn('Image_3973.jpg missing'); };
+  img.src = 'assets/img/Image_3973.jpg';
+})();
+
 function _pvpDrawCaveBG(ctx,W,H,now){
-  // Тёмный фон
-  var bg=ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0,'#040c05');bg.addColorStop(0.5,'#060f07');bg.addColorStop(1,'#020803');
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  var T=_TILES;
+  var floorY = PVP_FLOOR || Math.round(H*0.78);
+  var ts = Math.round(W/10);
 
-  // Каменная стена — горизонтальные ряды
-  var bH=20,bW=42;
-  for(var r=0;r<Math.ceil(H*0.85/bH);r++){
-    var ry=r*bH,off=(r%2)*(bW/2);
-    for(var c=-1;c<Math.ceil(W/bW)+1;c++){
-      var bx=c*bW+off;
-      ctx.strokeStyle='rgba(0,25,8,0.9)';ctx.lineWidth=1;
-      ctx.strokeRect(bx+1,ry+1,bW-2,bH-2);
-    }
-  }
+  var ceilRows = 2;
+  var allStone=[
+    'stone_1','stone_2','stone_3','stone_4','stone_5',
+    'stone_6','stone_7','stone_8','stone_9','stone_10',
+    'stone_11','stone_12','stone_13','stone_14','stone_15',
+  ];
+  var allMoss=[
+    'moss_1','moss_2','moss_3','moss_4','moss_5',
+    'moss_6','moss_7','moss_8','moss_9','moss_10',
+    'moss_11','moss_12','moss_13','moss_14','moss_15',
+  ];
+  var wallTop = ceilRows*ts;
+  var wallH   = floorY - wallTop;
+  var sideW   = ts;
 
-  // Сталактиты сверху
-  var stalH=[35,22,42,18,30,45,25,38,20,34,28,40,15,33];
-  stalH.forEach(function(sh,i){
-    var sx2=Math.round(W*(i+0.5)/stalH.length);
-    var sw2=5+Math.sin(i*1.7)*2;
-    ctx.fillStyle='#060f07';
+  // ════════════════════════════════════════════════════════════════
+  // LAYER 1 — FAR BACKGROUND (глубина, самый дальний план)
+  // ════════════════════════════════════════════════════════════════
+
+  // Базовый цвет — тёмно-зелёный грот
+  ctx.fillStyle='#0d1a0e';
+  ctx.fillRect(0,0,W,H);
+
+  // Далёкие арки — уходят в темноту, только силуэты
+  // Арка 1 — левая зона
+  (function(){
+    var archX=W*0.20, archBaseY=floorY, archW=W*0.22, archH=wallH*0.75;
+    ctx.save();
+    ctx.globalAlpha=0.22;
+    // Внутренность арки — абсолютная темнота = ощущение бездны
+    ctx.fillStyle='#050a05';
     ctx.beginPath();
-    ctx.moveTo(sx2-sw2,0);ctx.lineTo(sx2+sw2,0);
-    ctx.lineTo(sx2,sh);ctx.closePath();ctx.fill();
-    // капля
-    ctx.fillStyle='rgba(0,120,40,0.4)';
-    ctx.beginPath();ctx.arc(sx2,sh,2,0,Math.PI*2);ctx.fill();
+    ctx.moveTo(archX-archW/2, archBaseY);
+    ctx.lineTo(archX-archW/2, archBaseY-archH*0.55);
+    ctx.quadraticCurveTo(archX, archBaseY-archH, archX+archW/2, archBaseY-archH*0.55);
+    ctx.lineTo(archX+archW/2, archBaseY);
+    ctx.closePath();
+    ctx.fill();
+    // Каменный обвод арки
+    ctx.globalAlpha=0.18;
+    ctx.strokeStyle='#2a3d1e';
+    ctx.lineWidth=Math.round(ts*0.18);
+    ctx.stroke();
+    ctx.restore();
+  })();
+
+  // Арка 2 — правая зона
+  (function(){
+    var archX=W*0.80, archBaseY=floorY, archW=W*0.22, archH=wallH*0.72;
+    ctx.save();
+    ctx.globalAlpha=0.20;
+    ctx.fillStyle='#050a05';
+    ctx.beginPath();
+    ctx.moveTo(archX-archW/2, archBaseY);
+    ctx.lineTo(archX-archW/2, archBaseY-archH*0.55);
+    ctx.quadraticCurveTo(archX, archBaseY-archH, archX+archW/2, archBaseY-archH*0.55);
+    ctx.lineTo(archX+archW/2, archBaseY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha=0.15;
+    ctx.strokeStyle='#2a3d1e';
+    ctx.lineWidth=Math.round(ts*0.18);
+    ctx.stroke();
+    ctx.restore();
+  })();
+
+  // Далёкие «окна» — узкие световые бойницы высоко на стенах (слабый мистический свет)
+  var windowSlots=[
+    {x:W*0.08, y:wallTop+wallH*0.12, w:ts*0.12, h:wallH*0.22},
+    {x:W*0.92, y:wallTop+wallH*0.15, w:ts*0.12, h:wallH*0.20},
+    {x:W*0.04, y:wallTop+wallH*0.42, w:ts*0.10, h:wallH*0.16},
+    {x:W*0.96, y:wallTop+wallH*0.44, w:ts*0.10, h:wallH*0.15},
+  ];
+  windowSlots.forEach(function(win,i){
+    ctx.save();
+    // Холодное зеленоватое свечение из бойницы
+    var glow=ctx.createRadialGradient(win.x,win.y+win.h*0.4,0, win.x,win.y+win.h*0.4, win.h*1.8);
+    var pulse=0.08+Math.sin(now/2400+i*1.7)*0.03;
+    glow.addColorStop(0,'rgba(80,160,60,'+pulse+')');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.fillRect(win.x-win.h*2,win.y-win.h,win.h*4,win.h*4);
+    // Сама бойница — тёмный прямоугольник с заострённым верхом
+    ctx.globalAlpha=0.35;
+    ctx.fillStyle='#030805';
+    ctx.beginPath();
+    ctx.moveTo(win.x-win.w/2, win.y+win.h);
+    ctx.lineTo(win.x-win.w/2, win.y+win.h*0.3);
+    ctx.lineTo(win.x, win.y);
+    ctx.lineTo(win.x+win.w/2, win.y+win.h*0.3);
+    ctx.lineTo(win.x+win.w/2, win.y+win.h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   });
 
-  // Факелы — 3 штуки, высоко на стене
-  var torchY=Math.round(H*0.32);
-  [0.25,0.5,0.75].forEach(function(xp,i){
-    var tx=Math.round(W*xp);
-    var fl=Math.sin(now/110+i*1.9)*2+Math.sin(now/70+i)*1.5;
+  // Затемнение дальнего плана — создаёт атмосферную дымку
+  var farFog=ctx.createLinearGradient(0,wallTop,0,floorY);
+  farFog.addColorStop(0,'rgba(5,10,5,0.55)');
+  farFog.addColorStop(0.4,'rgba(5,10,5,0.30)');
+  farFog.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=farFog;
+  ctx.fillRect(0,wallTop,W,wallH);
 
-    // Кронштейн
-    ctx.fillStyle='#2a1a08';
-    ctx.fillRect(tx-2,torchY,4,10);
-    ctx.fillRect(tx-5,torchY+8,10,3);
+  // ════════════════════════════════════════════════════════════════
+  // LAYER 2 — MIDGROUND (средний план — стены, потолок, руны, цепи)
+  // ════════════════════════════════════════════════════════════════
 
-    // Свечение на стене (широкое, мягкое)
-    var wallG=ctx.createRadialGradient(tx,torchY,3,tx,torchY,55);
-    wallG.addColorStop(0,'rgba(0,160,50,0.18)');wallG.addColorStop(1,'rgba(0,80,20,0)');
-    ctx.fillStyle=wallG;ctx.fillRect(tx-55,torchY-20,110,75);
+  // Ambient свет середины арены — поднимает читаемость зоны боя
+  var midLight=ctx.createRadialGradient(W*0.5,H*0.45,0,W*0.5,H*0.45,W*0.55);
+  midLight.addColorStop(0,'rgba(60,90,55,0.18)');
+  midLight.addColorStop(0.6,'rgba(40,65,38,0.08)');
+  midLight.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=midLight;
+  ctx.fillRect(0,0,W,H);
 
-    // Пламя внешнее
-    var fg=ctx.createRadialGradient(tx,torchY+fl,1,tx,torchY+fl,14+Math.abs(fl));
-    fg.addColorStop(0,'rgba(0,255,80,0.85)');fg.addColorStop(0.4,'rgba(0,180,50,0.5)');fg.addColorStop(1,'rgba(0,80,20,0)');
-    ctx.fillStyle=fg;
-    ctx.beginPath();ctx.ellipse(tx,torchY+fl,9+Math.abs(fl)*0.5,14+Math.abs(fl),0,0,Math.PI*2);ctx.fill();
-
-    // Ядро
-    var fc=ctx.createRadialGradient(tx,torchY+2+fl,0,tx,torchY+2+fl,5);
-    fc.addColorStop(0,'rgba(220,255,220,1)');fc.addColorStop(0.5,'rgba(0,255,100,0.9)');fc.addColorStop(1,'rgba(0,200,60,0)');
-    ctx.fillStyle=fc;ctx.beginPath();ctx.ellipse(tx,torchY+2+fl,3,7,0,0,Math.PI*2);ctx.fill();
-  });
-
-  // Цепи — тонкие, только по бокам, не на весь экран
-  [[W*0.07],[W*0.93]].forEach(function(arr,ci){
-    var cx=Math.round(arr[0]);
-    var sway=Math.sin(now/1500+ci)*2;
-    for(var l=0;l<7;l++){
-      var ly=l*16;
-      ctx.strokeStyle=l%2===0?'#2a2a12':'#1e1e0c';ctx.lineWidth=2;
-      ctx.beginPath();ctx.ellipse(cx+sway,ly+8,4,7,0,0,Math.PI*2);ctx.stroke();
+  // ── 2. Потолок ───────────────────────────────────────────────────
+  function _htile(col,row){
+    var h=((col*2654435761)^(row*2246822519))>>>0;
+    return row===0 ? allStone[h%allStone.length] : allMoss[h%allMoss.length];
+  }
+  var wallCols=Math.ceil(W/ts)+1;
+  for(var row=0;row<ceilRows;row++){
+    for(var col=0;col<wallCols;col++){
+      var img=T[_htile(col,row)];
+      ctx.globalAlpha=0.95;
+      if(img) ctx.drawImage(img,col*ts,row*ts,ts,ts);
+      else { ctx.globalAlpha=1;ctx.fillStyle='#2a3e2b'; ctx.fillRect(col*ts,row*ts,ts,ts); }
     }
-    // Маленькая клетка внизу цепи
-    ctx.strokeStyle='#2a2a12';ctx.lineWidth=1;
-    ctx.strokeRect(cx+sway-7,7*16,14,14);
+  }
+  ctx.globalAlpha=1;
+
+  // ── 3. Боковые стены ─────────────────────────────────────────────
+  function _stile(col,row){
+    var h=((col*1234567)^(row*7654321))>>>0;
+    return allStone[h%allStone.length];
+  }
+  var sideRows=Math.ceil(wallH/ts)+1;
+  for(var r=0;r<sideRows;r++){
+    var img2=T[_stile(0,r)];
+    ctx.globalAlpha=0.92;
+    if(img2) ctx.drawImage(img2,0,wallTop+r*ts,sideW,ts);
+    var img3=T[_stile(1,r)];
+    if(img3) ctx.drawImage(img3,W-sideW,wallTop+r*ts,sideW,ts);
+  }
+  ctx.globalAlpha=1;
+
+  // ── 4. Тени от стен ──────────────────────────────────────────────
+  var lgr=ctx.createLinearGradient(0,0,sideW*1.5,0);
+  lgr.addColorStop(0,'rgba(0,0,0,0.45)'); lgr.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=lgr; ctx.fillRect(0,0,sideW*1.5,H);
+  var rgr=ctx.createLinearGradient(W,0,W-sideW*1.5,0);
+  rgr.addColorStop(0,'rgba(0,0,0,0.45)'); rgr.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=rgr; ctx.fillRect(W-sideW*1.5,0,sideW*1.5,H);
+
+  // ── 5. Тень от потолка ───────────────────────────────────────────
+  var ceilShadow=ctx.createLinearGradient(0,ceilRows*ts,0,ceilRows*ts+ts*1.2);
+  ceilShadow.addColorStop(0,'rgba(0,0,0,0.32)');
+  ceilShadow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=ceilShadow;
+  ctx.fillRect(0,ceilRows*ts,W,ts*1.2);
+
+  // ── 6. Руны ──────────────────────────────────────────────────────
+  var runeY=Math.round(wallTop + wallH*0.38);
+  var runeTs=Math.round(ts*0.9);
+  [['rune_1',sideW*0.1],['rune_2',W/2-runeTs/2],['rune_3',W-sideW-runeTs*0.9]].forEach(function(r,i){
+    var img=T[r[0]]; if(!img)return;
+    var rx=Math.round(r[1]);
+    var pulse=0.7+Math.sin(now/900+i*2.1)*0.2;
+    ctx.globalAlpha=pulse*0.85;
+    ctx.drawImage(img,rx,runeY,runeTs,runeTs);
+    ctx.globalAlpha=1;
   });
 
-  // Арка входа/окна (тёмный проём) по центру-правой части
-  ctx.fillStyle='rgba(0,8,2,0.7)';
-  ctx.beginPath();
-  ctx.arc(W*0.78,H*0.35,32,Math.PI,0,false);
-  ctx.rect(W*0.78-32,H*0.35,64,50);ctx.fill();
-  ctx.strokeStyle='rgba(0,60,20,0.5)';ctx.lineWidth=2;
-  ctx.beginPath();ctx.arc(W*0.78,H*0.35,32,Math.PI,0,false);ctx.stroke();
-
-  // Мох — вертикальные полосы на стене
-  for(var m=0;m<6;m++){
-    ctx.fillStyle='rgba(0,'+(60+m*8)+',15,0.1)';
-    ctx.fillRect(W*m/5+W*0.05,H*0.15,2+Math.sin(m)*1,H*0.55);
+  // ── 7. Цепи midground — средние, умеренная видимость ─────────────
+  var chainW=Math.round(ts*0.35);
+  var chainH=Math.round(wallH*0.4);
+  var sway=Math.sin(now/1800)*3;
+  [[T['chain_1'],W*0.25],[T['chain_2'],W*0.75]].forEach(function(c,i){
+    var cimg=c[0]; if(!cimg)return;
+    ctx.save();
+    ctx.globalAlpha=0.70;
+    ctx.translate(Math.round(c[1]),ceilRows*ts);
+    ctx.rotate((i===0?1:-1)*sway*0.008);
+    ctx.drawImage(cimg,-chainW/2,0,chainW,chainH);
+    ctx.restore();
+  });
+  ctx.globalAlpha=1;
+  var hookImg=T['chain_hook'];
+  if(hookImg){
+    var hw=Math.round(ts*0.45),hh=Math.round(ts*0.6);
+    ctx.globalAlpha=0.7;
+    ctx.drawImage(hookImg,Math.round(W/2-hw/2),ceilRows*ts,hw,hh);
+    ctx.globalAlpha=1;
   }
 
-  // Зелёное свечение снизу (у пола)
-  var botG=ctx.createLinearGradient(0,H*0.78,0,H*0.85);
-  botG.addColorStop(0,'rgba(0,100,30,0)');botG.addColorStop(1,'rgba(0,140,40,'+(0.06+Math.sin(now/900)*0.03)+')');
-  ctx.fillStyle=botG;ctx.fillRect(0,H*0.78,W,H*0.07);
-}
+  // ════════════════════════════════════════════════════════════════
+  // LAYER 3 — FOREGROUND (передний план — цепи ближние + туман)
+  // ════════════════════════════════════════════════════════════════
 
+  // Ближние цепи — крупнее, ярче, висят у краёв (не в gameplay зоне)
+  var fgChainW=Math.round(ts*0.28);
+  var fgChainH=Math.round(wallH*0.55);
+  var fgSway=Math.sin(now/1400)*4;
+  // Левая ближняя цепь — прижата к левой стене
+  var fgChainImg=T['chain_2']||T['chain_1'];
+  if(fgChainImg){
+    ctx.save();
+    ctx.globalAlpha=0.55;
+    ctx.filter='brightness(0.55)';
+    ctx.translate(Math.round(sideW*0.55), ceilRows*ts);
+    ctx.rotate(fgSway*0.010);
+    ctx.drawImage(fgChainImg,-fgChainW/2,0,fgChainW,fgChainH);
+    ctx.filter='none';
+    ctx.restore();
+  }
+  // Правая ближняя цепь
+  var fgChainImg2=T['chain_1']||T['chain_2'];
+  if(fgChainImg2){
+    ctx.save();
+    ctx.globalAlpha=0.50;
+    ctx.filter='brightness(0.50)';
+    ctx.translate(Math.round(W-sideW*0.55), ceilRows*ts);
+    ctx.rotate(-fgSway*0.010);
+    ctx.drawImage(fgChainImg2,-fgChainW/2,0,fgChainW,fgChainH);
+    ctx.filter='none';
+    ctx.restore();
+  }
+
+  // Туман у пола — мягкий, только вдоль нижней трети, не закрывает персонажей
+  // Слой 1: широкий базовый туман
+  var fogBase=ctx.createLinearGradient(0,floorY-wallH*0.30,0,floorY);
+  fogBase.addColorStop(0,'rgba(10,20,10,0)');
+  fogBase.addColorStop(0.55,'rgba(8,18,8,0.12)');
+  fogBase.addColorStop(1,'rgba(5,12,5,0.28)');
+  ctx.fillStyle=fogBase;
+  ctx.fillRect(0,floorY-wallH*0.30,W,wallH*0.30);
+
+  // Слой 2: анимированный дрейф тумана — горизонтальные полосы у самого пола
+  var fogDrift=Math.sin(now/3200)*W*0.06;
+  var fog2=ctx.createLinearGradient(fogDrift,floorY-ts*0.8,fogDrift+W,floorY-ts*0.8);
+  fog2.addColorStop(0,'rgba(15,30,12,0)');
+  fog2.addColorStop(0.3,'rgba(12,25,10,0.09)');
+  fog2.addColorStop(0.5,'rgba(20,40,15,0.14)');
+  fog2.addColorStop(0.7,'rgba(12,25,10,0.09)');
+  fog2.addColorStop(1,'rgba(15,30,12,0)');
+  ctx.fillStyle=fog2;
+  ctx.fillRect(0,floorY-ts*0.8,W,ts*0.8);
+
+  // Слой 3: тонкая полоска густого тумана прямо у основания пола
+  var fogDense=ctx.createLinearGradient(0,floorY-ts*0.25,0,floorY);
+  fogDense.addColorStop(0,'rgba(0,0,0,0)');
+  fogDense.addColorStop(1,'rgba(5,10,5,0.35)');
+  ctx.fillStyle=fogDense;
+  ctx.fillRect(0,floorY-ts*0.25,W,ts*0.25);
+
+  // Угловые тени переднего плана — углы экрана темнее (виньетка)
+  var vigSize=Math.round(ts*2.2);
+  // Верхние углы
+  var vtl=ctx.createRadialGradient(0,0,0,0,0,vigSize);
+  vtl.addColorStop(0,'rgba(0,0,0,0.50)'); vtl.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=vtl; ctx.fillRect(0,0,vigSize,vigSize);
+  var vtr=ctx.createRadialGradient(W,0,0,W,0,vigSize);
+  vtr.addColorStop(0,'rgba(0,0,0,0.50)'); vtr.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=vtr; ctx.fillRect(W-vigSize,0,vigSize,vigSize);
+  // Нижние углы
+  var vbl=ctx.createRadialGradient(0,H,0,0,H,vigSize);
+  vbl.addColorStop(0,'rgba(0,0,0,0.45)'); vbl.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=vbl; ctx.fillRect(0,H-vigSize,vigSize,vigSize);
+  var vbr=ctx.createRadialGradient(W,H,0,W,H,vigSize);
+  vbr.addColorStop(0,'rgba(0,0,0,0.45)'); vbr.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=vbr; ctx.fillRect(W-vigSize,H-vigSize,vigSize,vigSize);
+
+  // ── 8. Пол — 2 ряда тайлов (камень + мох) ───────────────────────
+  var floorCols=Math.ceil(W/ts)+1;
+  var floorRow2Y = floorY - ts;   // верхний ряд — мох (то что игрок стоит НА нём)
+  var floorRow1Y = floorY;        // нижний ряд — камень (глубина)
+
+  // Нижний ряд: камень — тёмный, создаёт depth под платформой
+  ctx.save();
+  // Тёмная подложка под каменным рядом для extra depth
+  ctx.fillStyle='#0a1209';
+  ctx.fillRect(0, floorRow1Y, W, ts + 4);
+  ctx.restore();
+  for(var col=0;col<floorCols;col++){
+    var _hf0=((col*1597)^(0*2017))>>>0;
+    var fn0=allStone[_hf0%allStone.length];
+    var fi0=T[fn0];
+    // Камень темнее — уходит в тень, создаёт ощущение толщины
+    ctx.globalAlpha=0.70;
+    if(fi0){
+      ctx.save();
+      ctx.filter='brightness(0.65)';
+      ctx.drawImage(fi0,col*ts,floorRow1Y,ts,ts);
+      ctx.filter='none';
+      ctx.restore();
+    } else { ctx.globalAlpha=1;ctx.fillStyle='#0e1a0f';ctx.fillRect(col*ts,floorRow1Y,ts,ts); }
+  }
+
+  // Верхний ряд: мох — ярче, это поверхность на которой стоят персонажи
+  for(var col=0;col<floorCols;col++){
+    var _hf1=((col*3141592)^(1*2718281))>>>0;
+    var fn1=allMoss[_hf1%allMoss.length];
+    var fi1=T[fn1];
+    // Мох полная яркость — хорошо читается
+    ctx.globalAlpha=1.0;
+    if(fi1){
+      ctx.save();
+      ctx.filter='brightness(1.25) saturate(1.3)';
+      ctx.drawImage(fi1,col*ts,floorRow2Y,ts,ts);
+      ctx.filter='none';
+      ctx.restore();
+    } else { ctx.globalAlpha=1;ctx.fillStyle='#2e5230';ctx.fillRect(col*ts,floorRow2Y,ts,ts); }
+  }
+  ctx.globalAlpha=1;
+
+  // Тёмная линия-граница между мхом и камнем — разделяет слои
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.fillRect(0, floorRow1Y, W, 3);
+  ctx.restore();
+
+  // Верхний край платформы — яркая зелёная линия (green glow edge)
+  ctx.save();
+  ctx.shadowColor='rgba(80,220,80,0.9)';
+  ctx.shadowBlur=8;
+  ctx.strokeStyle='rgba(100,220,80,0.85)';
+  ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(0,floorRow2Y);ctx.lineTo(W,floorRow2Y);ctx.stroke();
+  // второй, более тонкий и светлый пиксель поверх
+  ctx.shadowBlur=3;
+  ctx.strokeStyle='rgba(180,255,140,0.5)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,floorRow2Y+1);ctx.lineTo(W,floorRow2Y+1);ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.restore();
+
+  // ── 9. Декор у пола ──────────────────────────────────────────────
+  var decorH=Math.round(ts*0.75);
+  var decorY=floorRow2Y - decorH + Math.round(ts*0.12);
+  var decors=[
+    {name:'shroom_1',   xp:0.05},
+    {name:'coal_pile',  xp:0.16},
+    {name:'shroom_2',   xp:0.88},
+    {name:'coal_pile2', xp:0.78},
+    {name:'orb_green',  xp:0.50, pulse:true},
+    {name:'chest',      xp:0.93},
+  ];
+  decors.forEach(function(d){
+    var img=T[d.name]; if(!img)return;
+    var dh=decorH;
+    var dw=Math.round(img.naturalWidth*(dh/img.naturalHeight));
+    var dx=Math.round(W*d.xp-dw/2);
+    if(d.pulse){
+      ctx.globalAlpha=0.85+Math.sin(now/600)*0.12;
+    } else {
+      ctx.globalAlpha=0.92;
+    }
+    ctx.drawImage(img,dx,decorY,dw,dh);
+    ctx.globalAlpha=1;
+  });
+
+  // ── 10. Ambient свет у пола — усиленный ─────────────────────────
+  // Широкий мягкий glow поднимающийся от поверхности
+  var gf=ctx.createLinearGradient(0,floorRow2Y-ts*0.5,0,floorRow2Y+ts*0.5);
+  gf.addColorStop(0,'rgba(60,160,50,0.0)');
+  gf.addColorStop(0.35,'rgba(50,140,40,0.10)');
+  gf.addColorStop(0.65,'rgba(30,90,25,0.07)');
+  gf.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=gf;
+  ctx.fillRect(0,floorRow2Y-ts*0.5,W,ts);
+}
 function _pvpDrawFloor(ctx,W,H){
   var fy=PVP_FLOOR;
-  ctx.fillStyle='#08100a';ctx.fillRect(0,fy,W,H-fy);
-  // Плиты
-  var tw=52;
-  for(var t=0;t<Math.ceil(W/tw);t++){
-    ctx.strokeStyle='rgba(0,35,10,0.9)';ctx.lineWidth=1;
-    ctx.strokeRect(t*tw+1,fy+1,tw-2,16);
-  }
-  // Линия края — зелёный glow
-  ctx.shadowColor='rgba(0,200,60,0.5)';ctx.shadowBlur=10;
-  ctx.strokeStyle='rgba(0,180,50,0.6)';ctx.lineWidth=2;
+  ctx.save();
+  // Широкий мягкий glow под линией
+  ctx.shadowColor='rgba(80,220,80,0.6)';ctx.shadowBlur=12;
+  ctx.strokeStyle='rgba(120,220,90,0.7)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,fy);ctx.lineTo(W,fy);ctx.stroke();
+  // Яркий тонкий highlight поверх
+  ctx.shadowColor='rgba(180,255,140,0.8)';ctx.shadowBlur=4;
+  ctx.strokeStyle='rgba(200,255,160,0.45)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(0,fy);ctx.lineTo(W,fy);ctx.stroke();
   ctx.shadowBlur=0;
-
-  // Подарки у пола — маленькие, не мешают
-  var gifts=[
-    {x:0.38,s:0.55,c:'#cc0000',r:'#ff3333'},
-    {x:0.43,s:0.45,c:'#006600',r:'#00aa00'},
-    {x:0.62,s:0.5, c:'#0044aa',r:'#0066dd'},
-    {x:0.66,s:0.4, c:'#880044',r:'#cc0066'},
-  ];
-  gifts.forEach(function(g){
-    var gx=Math.round(W*g.x);
-    var gs=Math.round(12*g.s);
-    ctx.fillStyle=g.c;ctx.fillRect(gx-gs,fy-gs*2,gs*2,gs*2);
-    ctx.fillStyle=g.r;ctx.fillRect(gx-gs,fy-gs*2,gs*2,Math.round(gs*0.3));
-    ctx.fillStyle='#ffd700';
-    ctx.fillRect(gx-1,fy-gs*2,3,gs*2);
-    ctx.fillRect(gx-gs,fy-gs-1,gs*2,3);
-  });
+  ctx.restore();
 }
-
-// ── ИГРОК ────────────────────────────────────────────────────────
 function _pvpDrawPlayer(ctx,p){
   var x=Math.round(p.x),y=Math.round(p.y);
   ctx.save();
   if(p.dir<0){ctx.scale(-1,1);x=-x;}
-  if(_pvp.blocking){ctx.shadowColor='#0096ff';ctx.shadowBlur=16;}
+  // Тень на полу
+  ctx.save();
+  ctx.globalAlpha=0.45;
+  ctx.fillStyle='rgba(0,0,0,0.7)';
+  ctx.beginPath();ctx.ellipse(x,y,18,5,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // Зелёный glow вокруг персонажа
+  if(_pvp.blocking){ctx.shadowColor='#0096ff';ctx.shadowBlur=20;}
+  else{ctx.shadowColor='rgba(0,255,100,0.7)';ctx.shadowBlur=14;}
   // Ноги
   ctx.fillStyle='#1e4a1a';ctx.fillRect(x-8,y-14,7,14);ctx.fillRect(x+1,y-14,7,14);
   ctx.fillStyle='#162e13';ctx.fillRect(x-10,y-5,9,5);ctx.fillRect(x+1,y-5,9,5);
@@ -988,3 +1829,41 @@ window._pvpAttack=_pvpAttack;window._pvpMove=_pvpMove;window._pvpStopMove=_pvpSt
 window._pvpSwitchWeapon=_pvpSwitchWeapon;window._pvpPickWeapon=_pvpPickWeapon;
 window._pvpOpenBossLobby=_pvpOpenBossLobby;window._pvpBlockStart=_pvpBlockStart;
 window._pvpBlockEnd=_pvpBlockEnd;window._pvpJump=_pvpJump;
+
+// Инжектим стили сразу при загрузке чтобы экран s-pvp корректно отображался
+window.addEventListener('load', _pvpInjectStyles);
+
+// Пересчёт canvas при повороте / изменении размера окна
+function _pvpResizeCanvas(){
+  if(!PVP_RUNNING) return;
+  var canvas = document.getElementById('pvpCanvas');
+  var hud    = document.getElementById('pvpHUD');
+  var ctrl   = document.getElementById('pvpControls');
+  var inner  = document.getElementById('pvpBattleInner');
+  if(!canvas) return;
+
+  var vvW = window.innerWidth;
+  var vvH = window.innerHeight;
+  var _hudH  = hud  ? hud.offsetHeight  : 52;
+  var _canvasH = Math.max(vvH - _hudH, 120);  // контролы — overlay, не отнимают высоту
+
+  canvas.width         = vvW;
+  canvas.height        = _canvasH;
+  canvas.style.width   = vvW + 'px';
+  canvas.style.height  = _canvasH + 'px';
+
+  PVP_W     = vvW;
+  PVP_H     = _canvasH;
+  var _isPortrait2 = _canvasH > vvW;
+  PVP_FLOOR = Math.round(_canvasH * (_isPortrait2 ? 0.78 : 0.72));
+
+  // Пересчитываем позиции
+  if(_pvp.player){ _pvp.player.y = PVP_FLOOR; }
+  if(_pvp.boss)  { _pvp.boss.y   = PVP_FLOOR; _pvp.boss.x = PVP_W * 0.78; }
+}
+
+window.addEventListener('resize', function(){
+  // Небольшой debounce чтобы не дёргать на каждый px
+  clearTimeout(window._pvpResizeTimer);
+  window._pvpResizeTimer = setTimeout(_pvpResizeCanvas, 150);
+});

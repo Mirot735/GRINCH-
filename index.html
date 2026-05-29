@@ -35,12 +35,7 @@
 <style>
 @keyframes trophyGlow{0%,100%{box-shadow:0 0 10px rgba(241,196,15,.4),0 0 20px rgba(241,196,15,.1);}50%{box-shadow:0 0 18px rgba(241,196,15,.7),0 0 35px rgba(241,196,15,.3);}}
 @keyframes btnPulse{0%,100%{box-shadow:0 8px 28px rgba(241,196,15,.45),0 2px 8px rgba(231,76,60,.3);}50%{box-shadow:0 10px 36px rgba(241,196,15,.7),0 4px 16px rgba(231,76,60,.5);}}
-#s-pvp-boss.active, #s-pvp-battle.active { display:flex !important; flex-direction:column !important; width:100% !important; height:100% !important; position:fixed !important; top:0; left:0; overflow:hidden; }
-.pvp-wpn-btn { font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:700; border-radius:4px; cursor:pointer; padding:8px 6px; border:1px solid rgba(0,255,136,0.2); background:rgba(0,255,136,0.05); color:rgba(0,255,136,0.5); flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; -webkit-tap-highlight-color:transparent; transition:all .15s; }
-.pvp-wpn-btn.active { border-color:#00ff88; background:rgba(0,255,136,0.15); color:#00ff88; box-shadow:0 0 8px rgba(0,255,136,0.3); }
-.pvp-btn { font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:700; letter-spacing:2px; border:none; border-radius:4px; cursor:pointer; padding:12px 20px; -webkit-tap-highlight-color:transparent; }
-@keyframes pvpShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
-#pvpCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;}
+@keyframes pvpGlow{0%,100%{box-shadow:0 0 14px rgba(46,204,113,.9),0 0 28px rgba(46,204,113,.5);border-color:#2ecc71;}50%{box-shadow:0 0 22px rgba(46,204,113,1),0 0 44px rgba(46,204,113,.7);border-color:#27ae60;}}
 </style>
 <script>
 function show(name){
@@ -403,127 +398,60 @@ function submitTxVerify(){
 
 <!-- ====== PVP ====== -->
 <div id="s-pvp" class="screen">
-  <div class="page-header">
-    <div class="ph-back" onclick="show('menu')">◀</div>
-    <div class="ph-title">⚔️ PVP АРЕНА</div>
-    <div class="ph-right"></div>
+  <div class="page-header" style="background:#000;border-bottom:1px solid rgba(0,255,136,0.15);position:relative;">
+    <div style="position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#00ff88,transparent);"></div>
+    <div class="ph-back" onclick="show('menu')" style="border:1px solid rgba(0,255,136,0.2);border-radius:4px;color:#00ff88;background:rgba(0,255,136,0.04);">◀</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:#00ff88;letter-spacing:3px;text-shadow:0 0 14px rgba(0,255,136,0.7);"><span style="opacity:0.45;">// </span>PVP АРЕНА</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.35);letter-spacing:3px;">BOSS BATTLE</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:2px;color:#00ff88;">
+      <div style="width:6px;height:6px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88;animation:ratPulseDot 1.5s ease-in-out infinite;"></div>
+      LIVE
+    </div>
   </div>
-  <div class="pvp-online-bar">
-    <div class="pvp-online-dot"></div>
-    <div class="pvp-online-text">Онлайн сейчас:</div>
-    <div class="pvp-online-count">1,247 игроков</div>
-  </div>
-  <div class="pvp-content">
-    <div class="pvp-section-title">👹 Одиночные режимы</div>
+  <div class="pvp-content" style="background:#000;">
+    <!-- Prize banner -->
+    <div style="background:linear-gradient(135deg,rgba(255,215,0,0.08),rgba(255,215,0,0.04));border:1px solid rgba(255,215,0,0.25);border-radius:4px;padding:12px 14px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.5),transparent);"></div>
+      <div style="font-size:22px;">⚔️</div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;">
+        <div style="font-size:8px;font-weight:700;letter-spacing:3px;color:rgba(255,215,0,0.55);margin-bottom:3px;">// НАГРАДА ЗА ПОБЕДУ</div>
+        <div style="font-size:16px;font-weight:700;color:#ffd700;text-shadow:0 0 8px rgba(255,215,0,0.5);">500 🎁 + 30 GRINCH</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.3);margin-top:2px;">За каждое убийство тролля</div>
+      </div>
+      <div style="text-align:right;font-family:'IBM Plex Mono',monospace;">
+        <div style="font-size:22px;font-weight:700;color:#ffd700;">1v1</div>
+        <div style="font-size:8px;color:rgba(255,215,0,0.45);letter-spacing:1px;">РЕЖИМ</div>
+      </div>
+    </div>
 
-    <!-- VS BOSS — активный -->
-    <div class="pvp-game-card" onclick="_pvpOpenBossLobby()" style="border:1px solid rgba(107,140,58,0.5);background:rgba(107,140,58,0.06);position:relative;overflow:hidden;">
-      <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(107,140,58,0.7),transparent);"></div>
-      <div class="pvp-game-icon" style="background:linear-gradient(135deg,rgba(107,140,58,0.3),rgba(60,80,20,0.3));font-size:28px;">👹</div>
-      <div class="pvp-game-info">
-        <div class="pvp-game-name" style="color:#6b8c3a;">VS Тролль-Босс</div>
-        <div class="pvp-game-desc">1 на 1. Победи тролля — получи подарки и GRINCH токены!</div>
-        <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
-          <span class="pvp-game-badge badge-pvp">1v1</span>
-          <span style="font-size:9px;color:rgba(0,255,136,0.6);font-family:'IBM Plex Mono',monospace;">🎁 +500 &nbsp; 🟢 +30 GRINCH</span>
+    <!-- Section label -->
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;letter-spacing:3px;color:#00ff88;margin-top:4px;"><span style="opacity:0.45;">// </span>РЕЖИМЫ</div>
+
+    <!-- Boss card -->
+    <div onclick="_pvpOpenBossLobby()" style="background:linear-gradient(135deg,rgba(255,215,0,0.06),rgba(255,215,0,0.02));border:1px solid rgba(255,215,0,0.25);border-radius:4px;cursor:pointer;overflow:hidden;position:relative;-webkit-tap-highlight-color:transparent;">
+      <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,0.5),transparent);"></div>
+      <div style="display:flex;align-items:center;gap:14px;padding:14px;">
+        <div style="width:56px;height:56px;flex-shrink:0;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:32px;">👹</div>
+        <div style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;">
+          <div style="font-size:14px;font-weight:700;color:#ffd700;letter-spacing:2px;margin-bottom:4px;">ТРОЛЛЬ</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.45);line-height:1.5;margin-bottom:8px;">1 на 1. Победи тролля — получи подарки и GRINCH токены!</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span style="font-size:9px;font-weight:700;color:#00ff88;border:1px solid rgba(0,255,136,0.3);border-radius:2px;padding:2px 7px;background:rgba(0,255,136,0.07);">1v1</span>
+            <span style="font-size:9px;font-weight:700;color:#ffd700;border:1px solid rgba(255,215,0,0.3);border-radius:2px;padding:2px 7px;background:rgba(255,215,0,0.07);">BOSS</span>
+            <span style="font-size:9px;color:rgba(0,255,136,0.6);margin-left:auto;">ИГРАТЬ →</span>
+          </div>
         </div>
       </div>
-    </div>
-
-    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
-      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#e74c3c22,#c0392b22);">🎁</div>
-      <div class="pvp-game-info">
-        <div class="pvp-game-name">Битва за подарки</div>
-        <div class="pvp-game-desc">1 на 1. Кто поймает больше подарков за 60 сек — забирает ставку!</div>
-        <div style="margin-top:6px;"><span class="pvp-game-badge badge-pvp">1v1</span></div>
-      </div>
-    </div>
-    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
-      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#3498db22,#2980b922);">❄️</div>
-      <div class="pvp-game-info">
-        <div class="pvp-game-name">Снежная битва</div>
-        <div class="pvp-game-desc">Уворачивайся от снежков соперника и лови подарки одновременно!</div>
-        <div style="margin-top:6px;"><span class="pvp-game-badge badge-pvp">1v1</span></div>
-      </div>
-    </div>
-    <div class="pvp-section-title">👥 Командные режимы</div>
-    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
-      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#2ecc7122,#27ae6022);">🏆</div>
-      <div class="pvp-game-info">
-        <div class="pvp-game-name">Командная охота</div>
-        <div class="pvp-game-desc">3v3. Команда против команды. Победители делят банк подарков!</div>
-        <div style="margin-top:6px;"><span class="pvp-game-badge badge-team">3v3</span></div>
-      </div>
-    </div>
-    <div class="pvp-game-card" onclick="toast('Скоро будет доступно! 🔥')">
-      <div class="pvp-game-icon" style="background:linear-gradient(135deg,#f1c40f22,#e67e2222);">🎄</div>
-      <div class="pvp-game-info">
-        <div class="pvp-game-name">Новогодний турнир</div>
-        <div class="pvp-game-desc">5v5. Специальные события раз в неделю с призами в токенах GRINCH!</div>
-        <div style="margin-top:6px;"><span class="pvp-game-badge badge-team">5v5</span> <span class="pvp-game-badge badge-soon" style="margin-left:4px;">СКОРО</span></div>
-      </div>
+      <div style="height:2px;background:linear-gradient(90deg,#ffd700,#f39c12);"></div>
     </div>
   </div>
 </div>
 
-<!-- ====== PVP BOSS LOBBY ====== -->
-<div id="s-pvp-boss" class="screen" style="background:#000;">
-  <div class="page-header" style="flex-shrink:0;border-bottom:1px solid rgba(0,255,136,0.08);">
-    <div class="ph-back" onclick="show('pvp')">◀</div>
-    <div style="text-align:center;">
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.35);letter-spacing:2px;">// BOSS_BATTLE</div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:#00ff88;letter-spacing:2px;text-shadow:0 0 12px rgba(0,255,136,0.7);">VS ТРОЛЛЬ</div>
-    </div>
-    <div class="ph-right"></div>
-  </div>
-
-  <div style="flex:1;overflow-y:auto;padding:12px;">
-    <!-- Карточка босса -->
-    <div style="background:rgba(0,0,0,0.8);border:1px solid rgba(107,140,58,0.4);border-radius:4px;padding:16px;display:flex;gap:14px;align-items:center;margin-bottom:12px;position:relative;overflow:hidden;">
-      <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(107,140,58,0.6),transparent);"></div>
-      <div style="font-size:64px;line-height:1;flex-shrink:0;">👹</div>
-      <div style="flex:1;">
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(107,140,58,0.6);letter-spacing:2px;">BOSS #01</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;color:#6b8c3a;text-shadow:0 0 12px rgba(107,140,58,0.6);">ТРОЛЛЬ</div>
-        <div style="display:flex;gap:12px;margin-top:6px;">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,68,68,0.7);">❤️ 300 HP</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,215,0,0.7);">⚔️ 10-20 урон</div>
-        </div>
-        <div style="margin-top:8px;display:flex;gap:6px;">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.5);background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:3px;padding:3px 6px;">🎁 +500</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.5);background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.15);border-radius:3px;padding:3px 6px;">🟢 +30 GRINCH</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Выбор оружия -->
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(0,255,136,0.35);letter-spacing:2px;margin-bottom:8px;">// ВЫБОР ОРУЖИЯ</div>
-    <div style="display:flex;gap:6px;margin-bottom:12px;" id="bossWeaponSelect">
-      <button class="pvp-wpn-btn active" id="wpnBtn_sword" onclick="_pvpPickWeapon('sword')" style="flex:1;padding:10px 4px;">
-        <div style="font-size:22px;">⚔️</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;">Меч</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.6);">18-28</div>
-      </button>
-      <button class="pvp-wpn-btn" id="wpnBtn_bow" onclick="_pvpPickWeapon('bow')" style="flex:1;padding:10px 4px;">
-        <div style="font-size:22px;">🏹</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;">Лук</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.6);">12-20</div>
-      </button>
-      <button class="pvp-wpn-btn" id="wpnBtn_scythe" onclick="_pvpPickWeapon('scythe')" style="flex:1;padding:10px 4px;">
-        <div style="font-size:22px;">💀</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;">Коса</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,215,0,0.6);">28-42</div>
-      </button>
-    </div>
-
-    <!-- Кнопка старт -->
-    <button onclick="_pvpStartBoss()" style="width:100%;padding:16px;background:linear-gradient(135deg,#00ff88,#00cc6a);border:none;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:900;color:#000;letter-spacing:3px;cursor:pointer;box-shadow:0 4px 20px rgba(0,255,136,0.4);">⚔️ В БОЙ!</button>
-  </div>
-</div>
-
-<!-- ====== PVP BATTLE SCREEN ====== -->
+<!-- ====== PVP BATTLE ====== -->
 <div id="s-pvp-battle" class="screen" style="background:#000;">
-  <div id="pvpBattleInner" style="width:100%;height:100%;display:flex;flex-direction:column;"></div>
+  <div id="pvpBattleInner" style="display:flex;flex-direction:column;width:100%;height:100%;flex:1;overflow:hidden;"></div>
 </div>
 
 <!-- ====== SHOP ====== -->
