@@ -1,11 +1,21 @@
 // ═══════════════════════════════════════════════════════════════
-// GRINCH GAME — pvp.js v4.1
+// GRINCH GAME — pvp.js v4.2
 // boss_troll.png      → 612×408, 4cols×2rows, кадр 153×204
 // boss_troll_idle.png → 1774×887, 4cols×1row, кадр 443×887
+//
+// ИНТЕГРАЦИЯ map_tiles.js:
+// Подключи map_tiles.js ДО этого файла в HTML:
+//   <script src="map_tiles.js"></script>
+//   <script src="pvp.js"></script>
 // ═══════════════════════════════════════════════════════════════
 'use strict';
 
+// Безопасный fallback — если map_tiles.js не подключён
+if (typeof window._MT === 'undefined') { window._MT = { ready: false }; }
+if (typeof window._pvpDrawMapTiles === 'undefined') { window._pvpDrawMapTiles = null; }
+
 var PVP_W = 0, PVP_H = 0, PVP_FLOOR = 0;
+var PVP_WORLD_W = 0; // ширина мирового пространства арены (3× экрана)
 var PVP_RUNNING = false;
 var PVP_RAF = null;
 
@@ -218,6 +228,7 @@ function _bossDrawSprite(ctx, x, y) {
   var _canvas = _pvp.canvas;
   var _isLandscape = _canvas && _canvas.width > _canvas.height;
   var BOSS_H = _canvas ? Math.round(_canvas.height * (_isLandscape ? 0.66 : 0.43)) : Math.round(PVP_FLOOR * 0.62);
+  var BOSS_Y_OFFSET = _isLandscape ? 0 : Math.round(_canvas.height * 0.04); // сдвиг вниз для портрета
   var useAtk = (_bossAnim.cur==='windup'||_bossAnim.cur==='attack'||_bossAnim.cur==='recover');
   var useS2  = (_bossAnim.cur==='hurt');
   var SP     = useAtk ? BOSS_ATTACK : (useS2 ? BOSS_SPRITE2 : BOSS_SPRITE);
@@ -246,15 +257,24 @@ function _bossDrawSprite(ctx, x, y) {
     alpha=Math.max(0,1-prog);
   }
 
+  // Тень на полу под боссом — рисуем ДО flip, в нормальных координатах
+  (function(){
+    var _bsw = Math.round(dw * 0.30);
+    var _bsh = Math.max(4, Math.round(5 * (dw / 140)));
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.18;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(x, y, _bsw+5, _bsh+3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = alpha * 0.30;
+    ctx.beginPath(); ctx.ellipse(x, y, _bsw, _bsh, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = alpha * 0.42;
+    ctx.beginPath(); ctx.ellipse(x, y, Math.round(_bsw*0.5), Math.round(_bsh*0.65), 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  })();
+
   ctx.save();
   if(_pvp.boss&&_pvp.boss.facingRight){ctx.translate(x*2,0);ctx.scale(-1,1);}
   ctx.globalAlpha=alpha;
-  // Тень на полу под боссом
-  ctx.save();
-  ctx.globalAlpha=alpha*0.5;
-  ctx.fillStyle='rgba(0,0,0,0.7)';
-  ctx.beginPath();ctx.ellipse(x,y,Math.round(dw*0.38),6,0,0,Math.PI*2);ctx.fill();
-  ctx.restore();
   // Красный glow вокруг босса
   ctx.shadowColor='rgba(220,60,30,0.8)';
   ctx.shadowBlur=18;
@@ -271,16 +291,16 @@ function _bossDrawSprite(ctx, x, y) {
   if (_deathImg) {
     var _dw2=_deathImg.naturalWidth, _dh2=_deathImg.naturalHeight;
     var _dsc=BOSS_H/_dh2, _ddw=Math.round(_dw2*_dsc);
-    ctx.drawImage(_deathImg, 0, 0, _dw2, _dh2, Math.round(x-_ddw/2), Math.round(y-BOSS_H), _ddw, BOSS_H);
+    ctx.drawImage(_deathImg, 0, 0, _dw2, _dh2, Math.round(x-_ddw/2), Math.round(y-BOSS_H+BOSS_Y_OFFSET), _ddw, BOSS_H);
   } else if (_atkImg) {
     var _aw=_atkImg.naturalWidth, _ah=_atkImg.naturalHeight;
     var _asc=BOSS_H/_ah, _adw=Math.round(_aw*_asc);
-    ctx.drawImage(_atkImg, 0, 0, _aw, _ah, Math.round(x-_adw/2), Math.round(y-BOSS_H), _adw, BOSS_H);
+    ctx.drawImage(_atkImg, 0, 0, _aw, _ah, Math.round(x-_adw/2), Math.round(y-BOSS_H+BOSS_Y_OFFSET), _adw, BOSS_H);
   } else if (_flameIdx >= 0 && BOSS_FLAMES[_flameIdx]) {
     var _fi = BOSS_FLAMES[_flameIdx];
-    ctx.drawImage(_fi, 0, 0, _fi.naturalWidth, _fi.naturalHeight, Math.round(x-dw/2), Math.round(y-dh), dw, dh);
+    ctx.drawImage(_fi, 0, 0, _fi.naturalWidth, _fi.naturalHeight, Math.round(x-dw/2), Math.round(y-dh+BOSS_Y_OFFSET), dw, dh);
   } else {
-    ctx.drawImage(SP.img, sx, sy, SP.fw, SP.fh, Math.round(x-dw/2), Math.round(y-dh), dw, dh);
+    ctx.drawImage(SP.img, sx, sy, SP.fw, SP.fh, Math.round(x-dw/2), Math.round(y-dh+BOSS_Y_OFFSET), dw, dh);
   }
   ctx.globalAlpha=1;
   ctx.shadowBlur=0;
@@ -533,9 +553,10 @@ function _pvpLaunchBattle() {
   // После gate телефон уже landscape — берём реальные размеры окна
   PVP_W=window.innerWidth;
   PVP_H=window.innerHeight;
-  _pvp.boss={x:PVP_W*0.80,y:0,hp:bd.hp,maxHp:bd.hp,w:80,h:110,data:bd,
+  PVP_WORLD_W = PVP_W * 3;  // мировая ширина арены
+  _pvp.boss={x:PVP_WORLD_W*0.82,y:0,hp:bd.hp,maxHp:bd.hp,w:80,h:110,data:bd,
     state:'idle',knockX:0,facingRight:false,phase:0,windupTimer:0,windupActive:false};
-  _pvp.player={x:PVP_W*0.15,y:0,hp:100,maxHp:100,w:36,h:56,vx:0,vy:0,
+  _pvp.player={x:PVP_WORLD_W*0.12,y:0,hp:100,maxHp:100,w:36,h:56,vx:0,vy:0,
     onGround:true,dir:1,state:'idle'};
   _pvp.projectiles=[];_pvp.waves=[];_pvp.particles=[];
   _pvp.lastAtk=0;_pvp.lastBossAtk=0;_pvp.lastWave=0;
@@ -543,7 +564,9 @@ function _pvpLaunchBattle() {
   _pvp.phase=0;_pvp.phaseShown=-1;_pvp.blocking=false;
   _pvp.lastFrame=Date.now();_pvp.screenShake=0;
   _pvp.bossHitFlash=0;_pvp.playerHitFlash=0;_pvp.impactRings=[];_pvp.screenRedFlash=0;
-  _dmgNums=[];_pvpMoveDir=0;_pvp.camX=0;_slashFX=[];
+  _dmgNums=[];_pvpMoveDir=0;_slashFX=[];
+  // Инит камеры — сразу ставим на игрока чтобы не было прыжка
+  _pvp.camX = Math.max(0, Math.min(PVP_WORLD_W - PVP_W, PVP_WORLD_W * 0.12 - PVP_W * 0.4));
   _bossAnim.cur='walk';_bossAnim.frameIdx=0;_bossAnim.timer=0;_bossAnim.onDone=null;_bossAnim.locked=false;
   _bossPlayAnim('walk');
 
@@ -640,7 +663,6 @@ function _pvpLaunchBattle() {
       var _hudH  = hud  ? hud.offsetHeight  : 44;
       var _canvasH = Math.max(vvH - _hudH, 120);  // контролы — overlay, не отнимают высоту
 
-      // Растягиваем canvas на полную ширину экрана
       canvas.style.display = 'block';
       canvas.style.position = 'relative';
       canvas.style.left = '0';
@@ -651,12 +673,15 @@ function _pvpLaunchBattle() {
 
       PVP_W   = vvW;
       PVP_H   = _canvasH;
+      PVP_WORLD_W = vvW * 3;   // арена в 3× шире экрана
       // В портрете делаем пол ниже (0.78) чтобы был виден край арены
       var _isPortrait = _canvasH > vvW;
-      PVP_FLOOR = Math.round(_canvasH * (_isPortrait ? 0.78 : 0.72));
+      var _floorY = Math.round(_canvasH * (_isPortrait ? 0.78 : 0.72));
+      var _ts     = Math.round(vvW / 10);
+      PVP_FLOOR = _floorY - _ts;  // верх мхового ряда — реальная поверхность
 
-      _pvp.boss.x   = PVP_W * 0.78;
-      _pvp.player.x = PVP_W * 0.18;
+      _pvp.boss.x   = PVP_WORLD_W * 0.82;
+      _pvp.player.x = PVP_WORLD_W * 0.12;
       _pvp.player.y = PVP_FLOOR;
       _pvp.boss.y   = PVP_FLOOR;
 
@@ -814,8 +839,8 @@ function _pvpDamageBoss(dmg,kb){
         if(_deadCtx&&_deadCanvas){
           var _W=_deadCanvas.width,_H=_deadCanvas.height;
           _deadCtx.clearRect(0,0,_W,_H);
-          _pvpDrawCaveBG(_deadCtx,_W,_H,Date.now());
-          _deadCtx.fillStyle='rgba(0,0,0,0.62)';_deadCtx.fillRect(0,0,_W,_H);
+          _pvpDrawCaveBG(_deadCtx,_W,_H,Date.now(),_frozenCamX);
+          var _darkAlpha=Math.min(0.45,_elapsed/1100*0.45);_deadCtx.fillStyle='rgba(0,0,0,'+_darkAlpha.toFixed(3)+')';_deadCtx.fillRect(0,0,_W,_H);
           _deadCtx.save();_deadCtx.translate(-_frozenCamX,0);
           _pvpDrawFloor(_deadCtx,_W,_H);
           _pvpDrawPlayer(_deadCtx,_pvp.player);
@@ -1171,16 +1196,14 @@ function _pvpLoop(){
   var W=canvas.width,H=canvas.height;
   var sx=0,sy2=0;
   if(_pvp.screenShake>0){sx=(Math.random()-0.5)*_pvp.screenShake;sy2=(Math.random()-0.5)*_pvp.screenShake;_pvp.screenShake=Math.max(0,_pvp.screenShake-1);}
-  var _tcam=Math.min(0,_pvp.player.x-PVP_W*0.5);
-  _pvp.camX+=(_tcam-_pvp.camX)*0.08;
+  var _tcam = _pvp.player.x - PVP_W * 0.4;  // держим игрока на 40% от левого края
+  _tcam = Math.max(0, Math.min(PVP_WORLD_W - PVP_W, _tcam));  // зажим по миру
+  _pvp.camX+=(_tcam-_pvp.camX)*0.10;   // плавный follow
   var _cx=Math.round(_pvp.camX);
   // Очищаем и рисуем фон БЕЗ сдвига камеры — фон всегда на весь canvas
   ctx.save();
   ctx.clearRect(0,0,W,H);
-  _pvpDrawCaveBG(ctx,W,H,now);
-  // Лёгкое затемнение — арена читаема
-  ctx.fillStyle='rgba(0,0,0,0.22)';
-  ctx.fillRect(0,0,W,H);
+  _pvpDrawCaveBG(ctx,W,H,now,_pvp.camX);
   ctx.restore();
 
   // Теперь применяем сдвиг камеры для игровых объектов
@@ -1205,7 +1228,7 @@ function _pvpLoop(){
       if(Math.sqrt(ddx2*ddx2+ddy2*ddy2)<28){_pvpDamagePlayer(_rnd(_pvp.boss.data.atk[0],_pvp.boss.data.atk[1]));_pvpSpawnParticles(p.x,p.y,'#e74c3c',5);return false;}
     }
     ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0;ctx.restore();
-    return p.x>-30&&p.x<W+30&&p.y<H+30;
+    return p.x>-30&&p.x<PVP_WORLD_W+30&&p.y<H+30;
   });
 
   // Волны
@@ -1215,13 +1238,13 @@ function _pvpLoop(){
     ctx.save();ctx.globalAlpha=w.life/w.maxL;ctx.fillStyle=w.color;ctx.shadowColor=w.color;ctx.shadowBlur=12;
     ctx.fillRect(w.x-w.w/2,w.y-w.h,w.w,w.h);ctx.fillRect(w.x-w.w/2-8,w.y-w.h*0.6,8,w.h*0.6);ctx.fillRect(w.x+w.w/2,w.y-w.h*0.6,8,w.h*0.6);
     ctx.shadowBlur=0;ctx.globalAlpha=1;ctx.restore();
-    return w.life>0&&w.x>-50&&w.x<W+50;
+    return w.life>0&&w.x>-50&&w.x<PVP_WORLD_W+50;
   });
 
   // Движение
   if(_pvpMoveDir!==0&&!_pvp.blocking&&!_pvp.over){
     _pvp.player.x+=_pvpMoveDir*3.5;
-    _pvp.player.x=Math.max(-PVP_W+20,Math.min(PVP_W-30,_pvp.player.x));
+    _pvp.player.x=Math.max(20,Math.min(PVP_WORLD_W-30,_pvp.player.x));
     _pvp.player.state='walk';_pvp.player.dir=_pvpMoveDir;
   }
 
@@ -1375,393 +1398,9 @@ function _pvpLoop(){
   PVP_RAF=requestAnimationFrame(_pvpLoop);
 }
 
-// ── ПЕЩЕРНЫЙ ФОН ─────────────────────────────────────────────────
-// ── ФОН картинка ─────────────────────────────────────────────────
-var _pvpBgImg = null;
-(function(){
-  var img = new Image();
-  img.onload = function(){ _pvpBgImg = img; };
-  img.onerror = function(){ console.warn('Image_3973.jpg missing'); };
-  img.src = 'assets/img/Image_3973.jpg';
-})();
 
-function _pvpDrawCaveBG(ctx,W,H,now){
-  var T=_TILES;
-  var floorY = PVP_FLOOR || Math.round(H*0.78);
-  var ts = Math.round(W/10);
+// _pvpDrawCaveBG определена в pvp_map_patch.js (подключён до этого файла)
 
-  var ceilRows = 2;
-  var allStone=[
-    'stone_1','stone_2','stone_3','stone_4','stone_5',
-    'stone_6','stone_7','stone_8','stone_9','stone_10',
-    'stone_11','stone_12','stone_13','stone_14','stone_15',
-  ];
-  var allMoss=[
-    'moss_1','moss_2','moss_3','moss_4','moss_5',
-    'moss_6','moss_7','moss_8','moss_9','moss_10',
-    'moss_11','moss_12','moss_13','moss_14','moss_15',
-  ];
-  var wallTop = ceilRows*ts;
-  var wallH   = floorY - wallTop;
-  var sideW   = ts;
-
-  // ════════════════════════════════════════════════════════════════
-  // LAYER 1 — FAR BACKGROUND (глубина, самый дальний план)
-  // ════════════════════════════════════════════════════════════════
-
-  // Базовый цвет — тёмно-зелёный грот
-  ctx.fillStyle='#0d1a0e';
-  ctx.fillRect(0,0,W,H);
-
-  // Далёкие арки — уходят в темноту, только силуэты
-  // Арка 1 — левая зона
-  (function(){
-    var archX=W*0.20, archBaseY=floorY, archW=W*0.22, archH=wallH*0.75;
-    ctx.save();
-    ctx.globalAlpha=0.22;
-    // Внутренность арки — абсолютная темнота = ощущение бездны
-    ctx.fillStyle='#050a05';
-    ctx.beginPath();
-    ctx.moveTo(archX-archW/2, archBaseY);
-    ctx.lineTo(archX-archW/2, archBaseY-archH*0.55);
-    ctx.quadraticCurveTo(archX, archBaseY-archH, archX+archW/2, archBaseY-archH*0.55);
-    ctx.lineTo(archX+archW/2, archBaseY);
-    ctx.closePath();
-    ctx.fill();
-    // Каменный обвод арки
-    ctx.globalAlpha=0.18;
-    ctx.strokeStyle='#2a3d1e';
-    ctx.lineWidth=Math.round(ts*0.18);
-    ctx.stroke();
-    ctx.restore();
-  })();
-
-  // Арка 2 — правая зона
-  (function(){
-    var archX=W*0.80, archBaseY=floorY, archW=W*0.22, archH=wallH*0.72;
-    ctx.save();
-    ctx.globalAlpha=0.20;
-    ctx.fillStyle='#050a05';
-    ctx.beginPath();
-    ctx.moveTo(archX-archW/2, archBaseY);
-    ctx.lineTo(archX-archW/2, archBaseY-archH*0.55);
-    ctx.quadraticCurveTo(archX, archBaseY-archH, archX+archW/2, archBaseY-archH*0.55);
-    ctx.lineTo(archX+archW/2, archBaseY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha=0.15;
-    ctx.strokeStyle='#2a3d1e';
-    ctx.lineWidth=Math.round(ts*0.18);
-    ctx.stroke();
-    ctx.restore();
-  })();
-
-  // Далёкие «окна» — узкие световые бойницы высоко на стенах (слабый мистический свет)
-  var windowSlots=[
-    {x:W*0.08, y:wallTop+wallH*0.12, w:ts*0.12, h:wallH*0.22},
-    {x:W*0.92, y:wallTop+wallH*0.15, w:ts*0.12, h:wallH*0.20},
-    {x:W*0.04, y:wallTop+wallH*0.42, w:ts*0.10, h:wallH*0.16},
-    {x:W*0.96, y:wallTop+wallH*0.44, w:ts*0.10, h:wallH*0.15},
-  ];
-  windowSlots.forEach(function(win,i){
-    ctx.save();
-    // Холодное зеленоватое свечение из бойницы
-    var glow=ctx.createRadialGradient(win.x,win.y+win.h*0.4,0, win.x,win.y+win.h*0.4, win.h*1.8);
-    var pulse=0.08+Math.sin(now/2400+i*1.7)*0.03;
-    glow.addColorStop(0,'rgba(80,160,60,'+pulse+')');
-    glow.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=glow;
-    ctx.fillRect(win.x-win.h*2,win.y-win.h,win.h*4,win.h*4);
-    // Сама бойница — тёмный прямоугольник с заострённым верхом
-    ctx.globalAlpha=0.35;
-    ctx.fillStyle='#030805';
-    ctx.beginPath();
-    ctx.moveTo(win.x-win.w/2, win.y+win.h);
-    ctx.lineTo(win.x-win.w/2, win.y+win.h*0.3);
-    ctx.lineTo(win.x, win.y);
-    ctx.lineTo(win.x+win.w/2, win.y+win.h*0.3);
-    ctx.lineTo(win.x+win.w/2, win.y+win.h);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  });
-
-  // Затемнение дальнего плана — создаёт атмосферную дымку
-  var farFog=ctx.createLinearGradient(0,wallTop,0,floorY);
-  farFog.addColorStop(0,'rgba(5,10,5,0.55)');
-  farFog.addColorStop(0.4,'rgba(5,10,5,0.30)');
-  farFog.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=farFog;
-  ctx.fillRect(0,wallTop,W,wallH);
-
-  // ════════════════════════════════════════════════════════════════
-  // LAYER 2 — MIDGROUND (средний план — стены, потолок, руны, цепи)
-  // ════════════════════════════════════════════════════════════════
-
-  // Ambient свет середины арены — поднимает читаемость зоны боя
-  var midLight=ctx.createRadialGradient(W*0.5,H*0.45,0,W*0.5,H*0.45,W*0.55);
-  midLight.addColorStop(0,'rgba(60,90,55,0.18)');
-  midLight.addColorStop(0.6,'rgba(40,65,38,0.08)');
-  midLight.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=midLight;
-  ctx.fillRect(0,0,W,H);
-
-  // ── 2. Потолок ───────────────────────────────────────────────────
-  function _htile(col,row){
-    var h=((col*2654435761)^(row*2246822519))>>>0;
-    return row===0 ? allStone[h%allStone.length] : allMoss[h%allMoss.length];
-  }
-  var wallCols=Math.ceil(W/ts)+1;
-  for(var row=0;row<ceilRows;row++){
-    for(var col=0;col<wallCols;col++){
-      var img=T[_htile(col,row)];
-      ctx.globalAlpha=0.95;
-      if(img) ctx.drawImage(img,col*ts,row*ts,ts,ts);
-      else { ctx.globalAlpha=1;ctx.fillStyle='#2a3e2b'; ctx.fillRect(col*ts,row*ts,ts,ts); }
-    }
-  }
-  ctx.globalAlpha=1;
-
-  // ── 3. Боковые стены ─────────────────────────────────────────────
-  function _stile(col,row){
-    var h=((col*1234567)^(row*7654321))>>>0;
-    return allStone[h%allStone.length];
-  }
-  var sideRows=Math.ceil(wallH/ts)+1;
-  for(var r=0;r<sideRows;r++){
-    var img2=T[_stile(0,r)];
-    ctx.globalAlpha=0.92;
-    if(img2) ctx.drawImage(img2,0,wallTop+r*ts,sideW,ts);
-    var img3=T[_stile(1,r)];
-    if(img3) ctx.drawImage(img3,W-sideW,wallTop+r*ts,sideW,ts);
-  }
-  ctx.globalAlpha=1;
-
-  // ── 4. Тени от стен ──────────────────────────────────────────────
-  var lgr=ctx.createLinearGradient(0,0,sideW*1.5,0);
-  lgr.addColorStop(0,'rgba(0,0,0,0.45)'); lgr.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=lgr; ctx.fillRect(0,0,sideW*1.5,H);
-  var rgr=ctx.createLinearGradient(W,0,W-sideW*1.5,0);
-  rgr.addColorStop(0,'rgba(0,0,0,0.45)'); rgr.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=rgr; ctx.fillRect(W-sideW*1.5,0,sideW*1.5,H);
-
-  // ── 5. Тень от потолка ───────────────────────────────────────────
-  var ceilShadow=ctx.createLinearGradient(0,ceilRows*ts,0,ceilRows*ts+ts*1.2);
-  ceilShadow.addColorStop(0,'rgba(0,0,0,0.32)');
-  ceilShadow.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=ceilShadow;
-  ctx.fillRect(0,ceilRows*ts,W,ts*1.2);
-
-  // ── 6. Руны ──────────────────────────────────────────────────────
-  var runeY=Math.round(wallTop + wallH*0.38);
-  var runeTs=Math.round(ts*0.9);
-  [['rune_1',sideW*0.1],['rune_2',W/2-runeTs/2],['rune_3',W-sideW-runeTs*0.9]].forEach(function(r,i){
-    var img=T[r[0]]; if(!img)return;
-    var rx=Math.round(r[1]);
-    var pulse=0.7+Math.sin(now/900+i*2.1)*0.2;
-    ctx.globalAlpha=pulse*0.85;
-    ctx.drawImage(img,rx,runeY,runeTs,runeTs);
-    ctx.globalAlpha=1;
-  });
-
-  // ── 7. Цепи midground — средние, умеренная видимость ─────────────
-  var chainW=Math.round(ts*0.35);
-  var chainH=Math.round(wallH*0.4);
-  var sway=Math.sin(now/1800)*3;
-  [[T['chain_1'],W*0.25],[T['chain_2'],W*0.75]].forEach(function(c,i){
-    var cimg=c[0]; if(!cimg)return;
-    ctx.save();
-    ctx.globalAlpha=0.70;
-    ctx.translate(Math.round(c[1]),ceilRows*ts);
-    ctx.rotate((i===0?1:-1)*sway*0.008);
-    ctx.drawImage(cimg,-chainW/2,0,chainW,chainH);
-    ctx.restore();
-  });
-  ctx.globalAlpha=1;
-  var hookImg=T['chain_hook'];
-  if(hookImg){
-    var hw=Math.round(ts*0.45),hh=Math.round(ts*0.6);
-    ctx.globalAlpha=0.7;
-    ctx.drawImage(hookImg,Math.round(W/2-hw/2),ceilRows*ts,hw,hh);
-    ctx.globalAlpha=1;
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  // LAYER 3 — FOREGROUND (передний план — цепи ближние + туман)
-  // ════════════════════════════════════════════════════════════════
-
-  // Ближние цепи — крупнее, ярче, висят у краёв (не в gameplay зоне)
-  var fgChainW=Math.round(ts*0.28);
-  var fgChainH=Math.round(wallH*0.55);
-  var fgSway=Math.sin(now/1400)*4;
-  // Левая ближняя цепь — прижата к левой стене
-  var fgChainImg=T['chain_2']||T['chain_1'];
-  if(fgChainImg){
-    ctx.save();
-    ctx.globalAlpha=0.55;
-    ctx.filter='brightness(0.55)';
-    ctx.translate(Math.round(sideW*0.55), ceilRows*ts);
-    ctx.rotate(fgSway*0.010);
-    ctx.drawImage(fgChainImg,-fgChainW/2,0,fgChainW,fgChainH);
-    ctx.filter='none';
-    ctx.restore();
-  }
-  // Правая ближняя цепь
-  var fgChainImg2=T['chain_1']||T['chain_2'];
-  if(fgChainImg2){
-    ctx.save();
-    ctx.globalAlpha=0.50;
-    ctx.filter='brightness(0.50)';
-    ctx.translate(Math.round(W-sideW*0.55), ceilRows*ts);
-    ctx.rotate(-fgSway*0.010);
-    ctx.drawImage(fgChainImg2,-fgChainW/2,0,fgChainW,fgChainH);
-    ctx.filter='none';
-    ctx.restore();
-  }
-
-  // Туман у пола — мягкий, только вдоль нижней трети, не закрывает персонажей
-  // Слой 1: широкий базовый туман
-  var fogBase=ctx.createLinearGradient(0,floorY-wallH*0.30,0,floorY);
-  fogBase.addColorStop(0,'rgba(10,20,10,0)');
-  fogBase.addColorStop(0.55,'rgba(8,18,8,0.12)');
-  fogBase.addColorStop(1,'rgba(5,12,5,0.28)');
-  ctx.fillStyle=fogBase;
-  ctx.fillRect(0,floorY-wallH*0.30,W,wallH*0.30);
-
-  // Слой 2: анимированный дрейф тумана — горизонтальные полосы у самого пола
-  var fogDrift=Math.sin(now/3200)*W*0.06;
-  var fog2=ctx.createLinearGradient(fogDrift,floorY-ts*0.8,fogDrift+W,floorY-ts*0.8);
-  fog2.addColorStop(0,'rgba(15,30,12,0)');
-  fog2.addColorStop(0.3,'rgba(12,25,10,0.09)');
-  fog2.addColorStop(0.5,'rgba(20,40,15,0.14)');
-  fog2.addColorStop(0.7,'rgba(12,25,10,0.09)');
-  fog2.addColorStop(1,'rgba(15,30,12,0)');
-  ctx.fillStyle=fog2;
-  ctx.fillRect(0,floorY-ts*0.8,W,ts*0.8);
-
-  // Слой 3: тонкая полоска густого тумана прямо у основания пола
-  var fogDense=ctx.createLinearGradient(0,floorY-ts*0.25,0,floorY);
-  fogDense.addColorStop(0,'rgba(0,0,0,0)');
-  fogDense.addColorStop(1,'rgba(5,10,5,0.35)');
-  ctx.fillStyle=fogDense;
-  ctx.fillRect(0,floorY-ts*0.25,W,ts*0.25);
-
-  // Угловые тени переднего плана — углы экрана темнее (виньетка)
-  var vigSize=Math.round(ts*2.2);
-  // Верхние углы
-  var vtl=ctx.createRadialGradient(0,0,0,0,0,vigSize);
-  vtl.addColorStop(0,'rgba(0,0,0,0.50)'); vtl.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=vtl; ctx.fillRect(0,0,vigSize,vigSize);
-  var vtr=ctx.createRadialGradient(W,0,0,W,0,vigSize);
-  vtr.addColorStop(0,'rgba(0,0,0,0.50)'); vtr.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=vtr; ctx.fillRect(W-vigSize,0,vigSize,vigSize);
-  // Нижние углы
-  var vbl=ctx.createRadialGradient(0,H,0,0,H,vigSize);
-  vbl.addColorStop(0,'rgba(0,0,0,0.45)'); vbl.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=vbl; ctx.fillRect(0,H-vigSize,vigSize,vigSize);
-  var vbr=ctx.createRadialGradient(W,H,0,W,H,vigSize);
-  vbr.addColorStop(0,'rgba(0,0,0,0.45)'); vbr.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=vbr; ctx.fillRect(W-vigSize,H-vigSize,vigSize,vigSize);
-
-  // ── 8. Пол — 2 ряда тайлов (камень + мох) ───────────────────────
-  var floorCols=Math.ceil(W/ts)+1;
-  var floorRow2Y = floorY - ts;   // верхний ряд — мох (то что игрок стоит НА нём)
-  var floorRow1Y = floorY;        // нижний ряд — камень (глубина)
-
-  // Нижний ряд: камень — тёмный, создаёт depth под платформой
-  ctx.save();
-  // Тёмная подложка под каменным рядом для extra depth
-  ctx.fillStyle='#0a1209';
-  ctx.fillRect(0, floorRow1Y, W, ts + 4);
-  ctx.restore();
-  for(var col=0;col<floorCols;col++){
-    var _hf0=((col*1597)^(0*2017))>>>0;
-    var fn0=allStone[_hf0%allStone.length];
-    var fi0=T[fn0];
-    // Камень темнее — уходит в тень, создаёт ощущение толщины
-    ctx.globalAlpha=0.70;
-    if(fi0){
-      ctx.save();
-      ctx.filter='brightness(0.65)';
-      ctx.drawImage(fi0,col*ts,floorRow1Y,ts,ts);
-      ctx.filter='none';
-      ctx.restore();
-    } else { ctx.globalAlpha=1;ctx.fillStyle='#0e1a0f';ctx.fillRect(col*ts,floorRow1Y,ts,ts); }
-  }
-
-  // Верхний ряд: мох — ярче, это поверхность на которой стоят персонажи
-  for(var col=0;col<floorCols;col++){
-    var _hf1=((col*3141592)^(1*2718281))>>>0;
-    var fn1=allMoss[_hf1%allMoss.length];
-    var fi1=T[fn1];
-    // Мох полная яркость — хорошо читается
-    ctx.globalAlpha=1.0;
-    if(fi1){
-      ctx.save();
-      ctx.filter='brightness(1.25) saturate(1.3)';
-      ctx.drawImage(fi1,col*ts,floorRow2Y,ts,ts);
-      ctx.filter='none';
-      ctx.restore();
-    } else { ctx.globalAlpha=1;ctx.fillStyle='#2e5230';ctx.fillRect(col*ts,floorRow2Y,ts,ts); }
-  }
-  ctx.globalAlpha=1;
-
-  // Тёмная линия-граница между мхом и камнем — разделяет слои
-  ctx.save();
-  ctx.fillStyle='rgba(0,0,0,0.55)';
-  ctx.fillRect(0, floorRow1Y, W, 3);
-  ctx.restore();
-
-  // Верхний край платформы — яркая зелёная линия (green glow edge)
-  ctx.save();
-  ctx.shadowColor='rgba(80,220,80,0.9)';
-  ctx.shadowBlur=8;
-  ctx.strokeStyle='rgba(100,220,80,0.85)';
-  ctx.lineWidth=2.5;
-  ctx.beginPath();ctx.moveTo(0,floorRow2Y);ctx.lineTo(W,floorRow2Y);ctx.stroke();
-  // второй, более тонкий и светлый пиксель поверх
-  ctx.shadowBlur=3;
-  ctx.strokeStyle='rgba(180,255,140,0.5)';
-  ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(0,floorRow2Y+1);ctx.lineTo(W,floorRow2Y+1);ctx.stroke();
-  ctx.shadowBlur=0;
-  ctx.restore();
-
-  // ── 9. Декор у пола ──────────────────────────────────────────────
-  var decorH=Math.round(ts*0.75);
-  var decorY=floorRow2Y - decorH + Math.round(ts*0.12);
-  var decors=[
-    {name:'shroom_1',   xp:0.05},
-    {name:'coal_pile',  xp:0.16},
-    {name:'shroom_2',   xp:0.88},
-    {name:'coal_pile2', xp:0.78},
-    {name:'orb_green',  xp:0.50, pulse:true},
-    {name:'chest',      xp:0.93},
-  ];
-  decors.forEach(function(d){
-    var img=T[d.name]; if(!img)return;
-    var dh=decorH;
-    var dw=Math.round(img.naturalWidth*(dh/img.naturalHeight));
-    var dx=Math.round(W*d.xp-dw/2);
-    if(d.pulse){
-      ctx.globalAlpha=0.85+Math.sin(now/600)*0.12;
-    } else {
-      ctx.globalAlpha=0.92;
-    }
-    ctx.drawImage(img,dx,decorY,dw,dh);
-    ctx.globalAlpha=1;
-  });
-
-  // ── 10. Ambient свет у пола — усиленный ─────────────────────────
-  // Широкий мягкий glow поднимающийся от поверхности
-  var gf=ctx.createLinearGradient(0,floorRow2Y-ts*0.5,0,floorRow2Y+ts*0.5);
-  gf.addColorStop(0,'rgba(60,160,50,0.0)');
-  gf.addColorStop(0.35,'rgba(50,140,40,0.10)');
-  gf.addColorStop(0.65,'rgba(30,90,25,0.07)');
-  gf.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=gf;
-  ctx.fillRect(0,floorRow2Y-ts*0.5,W,ts);
-}
 function _pvpDrawFloor(ctx,W,H){
   var fy=PVP_FLOOR;
   ctx.save();
@@ -1780,11 +1419,22 @@ function _pvpDrawPlayer(ctx,p){
   var x=Math.round(p.x),y=Math.round(p.y);
   ctx.save();
   if(p.dir<0){ctx.scale(-1,1);x=-x;}
-  // Тень на полу
+  // Тень на полу — мягкая, многослойная, масштабируется с высотой прыжка
+  var _shadowY = PVP_FLOOR; // тень всегда на полу, не на игроке
+  var _airDist = Math.max(0, _shadowY - p.y); // 0 на земле, растёт в воздухе
+  var _shadowScale = Math.max(0.45, 1 - _airDist * 0.008); // сжимается в воздухе
+  var _shadowAlpha = Math.max(0.18, 0.52 - _airDist * 0.005);
+  var _sw = Math.round(20 * _shadowScale);
+  var _sh = Math.round(5 * _shadowScale);
+  // Три слоя: внешний → внутренний (без blur, только alpha-stepped)
   ctx.save();
-  ctx.globalAlpha=0.45;
-  ctx.fillStyle='rgba(0,0,0,0.7)';
-  ctx.beginPath();ctx.ellipse(x,y,18,5,0,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha = _shadowAlpha * 0.30;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x, _shadowY, _sw+5, _sh+3, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = _shadowAlpha * 0.55;
+  ctx.beginPath(); ctx.ellipse(x, _shadowY, _sw, _sh, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = _shadowAlpha * 0.80;
+  ctx.beginPath(); ctx.ellipse(x, _shadowY, Math.round(_sw*0.55), Math.round(_sh*0.7), 0, 0, Math.PI*2); ctx.fill();
   ctx.restore();
   // Зелёный glow вокруг персонажа
   if(_pvp.blocking){ctx.shadowColor='#0096ff';ctx.shadowBlur=20;}
@@ -1854,12 +1504,14 @@ function _pvpResizeCanvas(){
 
   PVP_W     = vvW;
   PVP_H     = _canvasH;
+  PVP_WORLD_W = vvW * 3;
   var _isPortrait2 = _canvasH > vvW;
-  PVP_FLOOR = Math.round(_canvasH * (_isPortrait2 ? 0.78 : 0.72));
+  var _floorY2 = Math.round(_canvasH * (_isPortrait2 ? 0.78 : 0.72));
+  PVP_FLOOR = _floorY2 - Math.round(vvW / 10);
 
   // Пересчитываем позиции
   if(_pvp.player){ _pvp.player.y = PVP_FLOOR; }
-  if(_pvp.boss)  { _pvp.boss.y   = PVP_FLOOR; _pvp.boss.x = PVP_W * 0.78; }
+  if(_pvp.boss)  { _pvp.boss.y   = PVP_FLOOR; _pvp.boss.x = PVP_WORLD_W * 0.82; }
 }
 
 window.addEventListener('resize', function(){
