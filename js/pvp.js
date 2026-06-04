@@ -57,6 +57,7 @@ var SLASH_SPRITE = {
   var _si = new Image();
   _si.onload = function(){ SLASH_SPRITE.img = _si; SLASH_SPRITE.loaded = true; };
   _si.onerror = function(){ console.warn('U0U.png missing'); };
+
   _si.src = SLASH_SPRITE.src;
 })();
 
@@ -121,218 +122,7 @@ function _tickSlashFX(dt, ctx) {
   });
 }
 
-// ── СПРАЙТ1: walk/attack ─────────────────────────────────────────
-var BOSS_SPRITE = {
-  img: null, loaded: false, src: 'assets/boss/walk.png',
-  fw: 184, fh: 226, cols: 2, rows: 3,
-  anims: {
-    walk:    { frames: [10,11,12,3,4,5], fps: 5, loop: true  },
-    dead:    { frames: [1,2,3,4,5,6],     fps: 4, loop: false },
-    windup:  { frames: [2,3],         fps: 4, loop: false },
-    attack:  { frames: [4,5],         fps: 6, loop: false },
-    recover: { frames: [0,1],         fps: 3, loop: false },
-  },
-};
-
-// ── FLAME кадры (замена кадров 0,1,2 из walk.png) ───────────────
-var BOSS_FLAMES = [null, null, null];
-(function(){
-  [0,1,2].forEach(function(i){
-    var img = new Image();
-    img.onload = function(){ BOSS_FLAMES[i] = img; };
-    img.onerror = function(){ console.warn('Flame'+i+'.png missing'); };
-    img.src = 'assets/boss/Flame'+i+'.png';
-  });
-})();
-
-// ── СМЕРТЬ (кадры 1-6) ───────────────────────────────────────────
-var BOSS_DEATH_FRAMES = new Array(7).fill(null);
-(function(){
-  for(var i=1;i<=6;i++){
-    (function(n){
-      var img=new Image();
-      img.onload=function(){BOSS_DEATH_FRAMES[n]=img;};
-      img.onerror=function(){console.warn('death'+n+'.png missing');};
-      img.src='assets/boss/death'+n+'.png';
-    })(i);
-  }
-})();
-
-// ── СПРАЙТ АТАКИ (6 отдельных файлов) ───────────────────────────
-var BOSS_ATTACK_FRAMES = new Array(6).fill(null);
-(function(){
-  for(var i=0;i<6;i++){
-    (function(n){
-      var img=new Image();
-      img.onload=function(){BOSS_ATTACK_FRAMES[n]=img;};
-      img.onerror=function(){console.warn('attack'+n+'.png missing');};
-      img.src='assets/boss/attack'+n+'.png';
-    })(i);
-  }
-})();
-var BOSS_ATTACK = {
-  loaded: true, img: true,
-  fw: 220, fh: 160, cols: 1, rows: 1,
-  anims: {
-    windup:  { frames: [0,1],   fps: 5, loop: false },
-    attack:  { frames: [2,3],   fps: 7, loop: false },
-    recover: { frames: [4,5],   fps: 5, loop: false },
-    dead:    { frames: [1,2,3,4,5,6], fps: 4, loop: false },
-  },
-};
-
-// ── СПРАЙТ2: idle/hurt/dead ──────────────────────────────────────
-var BOSS_SPRITE2 = {
-  img: null, loaded: false, src: 'assets/img/boss_troll_idle.png',
-  fw: 443, fh: 887, cols: 4,
-  anims: {
-    idle: { frames: [0,1], fps: 2, loop: true  },
-    hurt: { frames: [2],   fps: 4, loop: false },
-    dead: { frames: [2,3], fps: 3, loop: false },
-  },
-};
-
-// ── АНИМАЦИЯ ─────────────────────────────────────────────────────
-var _bossAnim = { cur:'walk', frameIdx:0, timer:0, onDone:null, locked:false };
-
-function _bossPlayAnim(name, onDone) {
-  var isCombat = (name==='windup'||name==='attack'||name==='recover'||name==='dead');
-  var isIdle   = (name==='idle'||name==='walk'||name==='hurt');
-  if (_bossAnim.locked && isIdle && !onDone) return;
-  if (_bossAnim.cur===name && !onDone && !isCombat) return;
-  _bossAnim.cur=name; _bossAnim.frameIdx=0; _bossAnim.timer=0;
-  _bossAnim.onDone=onDone||null; _bossAnim.locked=isCombat;
-}
-
-function _bossTickAnim(dt) {
-  var useAtk=(_bossAnim.cur==='windup'||_bossAnim.cur==='attack'||_bossAnim.cur==='recover');
-  var useS2=(_bossAnim.cur==='hurt');
-  var SP=useAtk?BOSS_ATTACK:(useS2?BOSS_SPRITE2:BOSS_SPRITE);
-  var anim=(useAtk?BOSS_ATTACK.anims:(useS2?BOSS_SPRITE2.anims:BOSS_SPRITE.anims))[_bossAnim.cur];
-  if(!anim)return;
-  _bossAnim.timer+=Math.min(dt,100);
-  var fd=1000/anim.fps;
-  if(_bossAnim.timer>=fd){
-    _bossAnim.timer-=fd; _bossAnim.frameIdx++;
-    if(_bossAnim.frameIdx>=anim.frames.length){
-      if(anim.loop){ _bossAnim.frameIdx=0; }
-      else {
-        _bossAnim.frameIdx=anim.frames.length-1;
-        if(_bossAnim.onDone){var cb=_bossAnim.onDone;_bossAnim.onDone=null;_bossAnim.locked=false;cb();}
-      }
-    }
-  }
-}
-
-function _bossDrawSprite(ctx, x, y) {
-  var _canvas = _pvp.canvas;
-  var _isLandscape = _canvas && _canvas.width > _canvas.height;
-  var BOSS_H = _canvas ? Math.round(_canvas.height * (_isLandscape ? 0.66 : 0.43)) : Math.round(PVP_FLOOR * 0.62);
-  var BOSS_Y_OFFSET = _isLandscape ? 0 : Math.round(_canvas.height * 0.04); // сдвиг вниз для портрета
-  var useAtk = (_bossAnim.cur==='windup'||_bossAnim.cur==='attack'||_bossAnim.cur==='recover');
-  var useS2  = (_bossAnim.cur==='hurt');
-  var SP     = useAtk ? BOSS_ATTACK : (useS2 ? BOSS_SPRITE2 : BOSS_SPRITE);
-  var anims  = useAtk ? BOSS_ATTACK.anims : (useS2 ? BOSS_SPRITE2.anims : BOSS_SPRITE.anims);
-
-  // Пока спрайт не загружен — ничего не рисуем (не зелёный квадрат)
-  if (!SP.loaded || !SP.img) return;
-
-  var anim = anims[_bossAnim.cur];
-  if (!anim) { anim = anims.idle || anims.walk; }
-  if (!anim) return;
-
-  var fi  = Math.min(_bossAnim.frameIdx, anim.frames.length-1);
-  var frameNum = anim.frames[fi];
-  var col  = frameNum % SP.cols;
-  var row  = Math.floor(frameNum / SP.cols);
-  var sx   = col * SP.fw;
-  var sy   = row * SP.fh;
-  var sc   = BOSS_H / SP.fh;
-  var dw   = Math.round(SP.fw * sc);
-  var dh   = BOSS_H;
-
-  var alpha=1;
-  if(_bossAnim.cur==='dead'){
-    var prog=Math.min(1,fi/Math.max(1,anim.frames.length-1));
-    alpha=Math.max(0,1-prog);
-  }
-
-  // Тень на полу под боссом — рисуем ДО flip, в нормальных координатах
-  (function(){
-    var _bsw = Math.round(dw * 0.30);
-    var _bsh = Math.max(4, Math.round(5 * (dw / 140)));
-    ctx.save();
-    ctx.globalAlpha = alpha * 0.18;
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(x, y, _bsw+5, _bsh+3, 0, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = alpha * 0.30;
-    ctx.beginPath(); ctx.ellipse(x, y, _bsw, _bsh, 0, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = alpha * 0.42;
-    ctx.beginPath(); ctx.ellipse(x, y, Math.round(_bsw*0.5), Math.round(_bsh*0.65), 0, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-  })();
-
-  ctx.save();
-  if(_pvp.boss&&_pvp.boss.facingRight){ctx.translate(x*2,0);ctx.scale(-1,1);}
-  ctx.globalAlpha=alpha;
-  // Красный glow вокруг босса
-  ctx.shadowColor='rgba(220,60,30,0.8)';
-  ctx.shadowBlur=18;
-  // Рисуем кадр
-  var _flameIdx = frameNum >= 10 ? frameNum - 10 : -1;
-  var _deathImg = null;
-  if(_bossAnim.cur==='dead'){
-    var _dfi = Math.min(fi+1, 6);
-    for(var _dj=_dfi; _dj>=1; _dj--){
-      if(BOSS_DEATH_FRAMES[_dj]){_deathImg=BOSS_DEATH_FRAMES[_dj];break;}
-    }
-  }
-  var _atkImg = useAtk && BOSS_ATTACK_FRAMES[frameNum] ? BOSS_ATTACK_FRAMES[frameNum] : null;
-  if (_deathImg) {
-    var _dw2=_deathImg.naturalWidth, _dh2=_deathImg.naturalHeight;
-    var _dsc=BOSS_H/_dh2, _ddw=Math.round(_dw2*_dsc);
-    ctx.drawImage(_deathImg, 0, 0, _dw2, _dh2, Math.round(x-_ddw/2), Math.round(y-BOSS_H+BOSS_Y_OFFSET), _ddw, BOSS_H);
-  } else if (_atkImg) {
-    var _aw=_atkImg.naturalWidth, _ah=_atkImg.naturalHeight;
-    var _asc=BOSS_H/_ah, _adw=Math.round(_aw*_asc);
-    ctx.drawImage(_atkImg, 0, 0, _aw, _ah, Math.round(x-_adw/2), Math.round(y-BOSS_H+BOSS_Y_OFFSET), _adw, BOSS_H);
-  } else if (_flameIdx >= 0 && BOSS_FLAMES[_flameIdx]) {
-    var _fi = BOSS_FLAMES[_flameIdx];
-    ctx.drawImage(_fi, 0, 0, _fi.naturalWidth, _fi.naturalHeight, Math.round(x-dw/2), Math.round(y-dh+BOSS_Y_OFFSET), dw, dh);
-  } else {
-    ctx.drawImage(SP.img, sx, sy, SP.fw, SP.fh, Math.round(x-dw/2), Math.round(y-dh+BOSS_Y_OFFSET), dw, dh);
-  }
-  ctx.globalAlpha=1;
-  ctx.shadowBlur=0;
-  ctx.restore();
-
-  // Красная аура фаза3
-  if(_pvp.boss&&_pvp.boss.phase>=2&&_bossAnim.cur!=='dead'){
-    ctx.save();
-    ctx.globalAlpha=0.12+Math.sin(Date.now()/200)*0.06;
-    var gr=ctx.createRadialGradient(x,y-dh/2,5,x,y-dh/2,dw*0.6);
-    gr.addColorStop(0,'rgba(255,0,0,0.5)');gr.addColorStop(1,'rgba(255,0,0,0)');
-    ctx.fillStyle=gr;ctx.fillRect(x-dw,y-dh-10,dw*2,dh+10);
-    ctx.globalAlpha=1;ctx.restore();
-  }
-}
-
-function _bossLoadSprite(){
-  if(!BOSS_SPRITE.loaded&&!BOSS_SPRITE._loading){
-    BOSS_SPRITE._loading=true;
-    var i=new Image();
-    i.onload=function(){BOSS_SPRITE.img=i;BOSS_SPRITE.loaded=true;};
-    i.onerror=function(){BOSS_SPRITE._loading=false;console.warn('boss_troll.png missing');};
-    i.src=BOSS_SPRITE.src;
-  }
-  if(!BOSS_SPRITE2.loaded&&!BOSS_SPRITE2._loading){
-    BOSS_SPRITE2._loading=true;
-    var i2=new Image();
-    i2.onload=function(){BOSS_SPRITE2.img=i2;BOSS_SPRITE2.loaded=true;};
-    i2.onerror=function(){BOSS_SPRITE2._loading=false;console.warn('boss_troll_idle.png missing');};
-    i2.src=BOSS_SPRITE2.src;
-  }
-}
+// ── BOSS SPRITES & ANIMATION — см. pvp_map_patch.js ───────────────
 
 // ── ОРУЖИЯ ───────────────────────────────────────────────────────
 var PVP_WEAPONS={
@@ -367,98 +157,8 @@ function _pvpOpenBossLobby(){
 function openPVP(){_bossLoadSprite();_pvpInjectStyles();show('pvp');}
 
 function _pvpInjectStyles(){
-  if(document.getElementById('_pvpStyle'))return;
-  var st=document.createElement('style');st.id='_pvpStyle';
-  st.textContent=[
-    '#s-pvp{background:#000!important;font-family:"IBM Plex Mono",monospace!important;}',
-    '#s-pvp-battle{background:#000!important;}',
-
-    '#pvpCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;}',
-    '.pvp-btn{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:700;letter-spacing:2px;border:none;border-radius:4px;cursor:pointer;padding:12px 20px;-webkit-tap-highlight-color:transparent;}',
-    '.pvp-wpn-btn{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;padding:8px 6px;border:1px solid rgba(0,255,136,0.35);background:rgba(0,10,6,0.72);color:rgba(0,255,136,0.6);flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;-webkit-tap-highlight-color:transparent;transition:all .15s;backdrop-filter:blur(4px);}',
-    '.pvp-wpn-btn.active{border-color:#00ff88;background:rgba(0,255,136,0.12);color:#00ff88;box-shadow:0 0 10px rgba(0,255,136,0.45),inset 0 0 8px rgba(0,255,136,0.08);}',
-    '.pvp-ctrl-btn{display:flex;align-items:center;justify-content:center;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:6px;font-size:20px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;}',
-
-    /* ── keyframes ── */
-    '@keyframes pvpPhase{0%{opacity:0;transform:scale(0.5)}50%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1)}}',
-    '@keyframes pvpNeonPulse{0%,100%{box-shadow:0 0 6px rgba(0,255,136,0.5),0 0 14px rgba(0,255,136,0.2),inset 0 0 6px rgba(0,255,136,0.06)}50%{box-shadow:0 0 10px rgba(0,255,136,0.8),0 0 22px rgba(0,255,136,0.35),inset 0 0 10px rgba(0,255,136,0.12)}}',
-    '@keyframes pvpBlockPulse{0%,100%{border-color:rgba(60,160,255,0.5);box-shadow:0 0 8px rgba(60,160,255,0.4),inset 0 0 6px rgba(60,160,255,0.08)}50%{border-color:rgba(120,200,255,0.9);box-shadow:0 0 16px rgba(60,160,255,0.7),0 0 30px rgba(60,160,255,0.25),inset 0 0 12px rgba(60,160,255,0.15)}}',
-    '.pvp-block-active{animation:pvpBlockPulse 0.5s infinite!important;}',
-
-    /* ── layout (unchanged) ── */
-    '#pvpControls{position:absolute;bottom:0;left:0;right:0;height:96px;pointer-events:none;z-index:20;}',
-    '#pvpCtrlLeft{position:absolute;bottom:10px;left:8px;display:flex;gap:6px;pointer-events:auto;}',
-    '#pvpCtrlRight{position:absolute;bottom:10px;right:8px;display:flex;flex-direction:row;align-items:flex-end;gap:6px;pointer-events:auto;}',
-    '#pvpCtrlSecondary{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:5px;pointer-events:auto;}',
-
-    /* ── move buttons — neon green outline ── */
-    '.pvp-move-btn{'+
-      'width:58px;height:58px;border-radius:50%;'+
-      'background:rgba(0,8,4,0.68);'+
-      'border:1.5px solid rgba(0,255,136,0.45);'+
-      'box-shadow:0 0 8px rgba(0,255,136,0.30),0 0 18px rgba(0,255,136,0.10),inset 0 0 8px rgba(0,255,136,0.05);'+
-      'font-size:22px;color:rgba(0,255,136,0.70);'+
-      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
-      'display:flex;align-items:center;justify-content:center;'+
-      'backdrop-filter:blur(6px);transition:box-shadow .08s,background .08s;}',
-    '.pvp-move-btn:active{'+
-      'background:rgba(0,255,136,0.14);'+
-      'border-color:rgba(0,255,136,0.95);'+
-      'box-shadow:0 0 14px rgba(0,255,136,0.75),0 0 28px rgba(0,255,136,0.30),inset 0 0 12px rgba(0,255,136,0.15);'+
-      'color:#00ff88;transform:scale(0.93);}',
-
-    /* ── attack button — bigger neon, red accent ── */
-    '.pvp-atk-btn{'+
-      'width:78px;height:78px;border-radius:50%;'+
-      'background:rgba(6,0,2,0.72);'+
-      'border:2px solid rgba(255,60,80,0.60);'+
-      'box-shadow:0 0 10px rgba(255,60,80,0.35),0 0 24px rgba(255,60,80,0.12),inset 0 0 10px rgba(255,60,80,0.06);'+
-      'font-size:32px;'+
-      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
-      'display:flex;align-items:center;justify-content:center;'+
-      'backdrop-filter:blur(6px);transition:box-shadow .08s,background .08s;}',
-    '.pvp-atk-btn:active{'+
-      'background:rgba(255,60,80,0.18);'+
-      'border-color:rgba(255,80,100,0.98);'+
-      'box-shadow:0 0 18px rgba(255,60,80,0.80),0 0 36px rgba(255,60,80,0.35),inset 0 0 14px rgba(255,60,80,0.18);'+
-      'transform:scale(0.90);}',
-
-    /* ── secondary (jump / block) — neon green smaller ── */
-    '.pvp-sec-btn{'+
-      'width:40px;height:40px;border-radius:50%;'+
-      'background:rgba(0,8,4,0.65);'+
-      'border:1.5px solid rgba(0,255,136,0.38);'+
-      'box-shadow:0 0 6px rgba(0,255,136,0.22),inset 0 0 5px rgba(0,255,136,0.04);'+
-      'font-size:16px;color:rgba(0,255,136,0.65);'+
-      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
-      'display:flex;align-items:center;justify-content:center;'+
-      'backdrop-filter:blur(5px);transition:box-shadow .08s,background .08s;}',
-    '.pvp-sec-btn:active{'+
-      'background:rgba(0,255,136,0.16);'+
-      'border-color:rgba(0,255,136,0.95);'+
-      'box-shadow:0 0 12px rgba(0,255,136,0.65),0 0 22px rgba(0,255,136,0.22),inset 0 0 10px rgba(0,255,136,0.12);'+
-      'color:#00ff88;transform:scale(0.91);}',
-
-    /* ── weapon selector mini buttons ── */
-    '.pvp-wpn-mini{'+
-      'width:36px;height:36px;border-radius:50%;'+
-      'background:rgba(0,8,4,0.62);'+
-      'border:1.5px solid rgba(0,255,136,0.28);'+
-      'box-shadow:0 0 4px rgba(0,255,136,0.14);'+
-      'font-size:15px;'+
-      'cursor:pointer;-webkit-tap-highlight-color:transparent;'+
-      'display:flex;align-items:center;justify-content:center;'+
-      'transition:all .12s;opacity:0.6;backdrop-filter:blur(4px);}',
-    '.pvp-wpn-mini.active{'+
-      'opacity:1;'+
-      'border-color:rgba(0,255,136,0.90);'+
-      'background:rgba(0,255,136,0.13);'+
-      'box-shadow:0 0 10px rgba(0,255,136,0.55),0 0 20px rgba(0,255,136,0.18),inset 0 0 8px rgba(0,255,136,0.10);'+
-      'animation:pvpNeonPulse 2s ease-in-out infinite;}',
-  ].join('');
-  document.head.appendChild(st);
+  // CSS перенесён в pvp.css
 }
-
 function _pvpShowLobby(){return;}
 function _pvpPickWeapon(key){
   _pvp.weapon=key;
@@ -559,7 +259,7 @@ function _pvpLaunchBattle() {
   _pvp.player={x:PVP_WORLD_W*0.12,y:0,hp:100,maxHp:100,w:36,h:56,vx:0,vy:0,
     onGround:true,dir:1,state:'idle'};
   _pvp.projectiles=[];_pvp.waves=[];_pvp.particles=[];
-  _pvp.lastAtk=0;_pvp.lastBossAtk=0;_pvp.lastWave=0;
+  _pvp.lastAtk=0;_pvp.lastBossAtk=0;_pvp.lastWave=0;_pvp.attackAnim=0;
   _pvp.over=false;_pvp.won=false;_pvp.startTime=Date.now();
   _pvp.phase=0;_pvp.phaseShown=-1;_pvp.blocking=false;
   _pvp.lastFrame=Date.now();_pvp.screenShake=0;
@@ -708,6 +408,11 @@ function _pvpAttack(){
   var now=Date.now(),wpn=PVP_WEAPONS[_pvp.weapon];
   if(now-_pvp.lastAtk<wpn.cooldown)return;
   _pvp.lastAtk=now;
+  // Запускаем анимацию атаки
+  _pvp.player.state='attack';
+  _pvp.attackAnim=30; // ~30 кадров = ~0.5 сек
+  _heroSpecialLocked=false; // сбрасываем special если была
+  _heroAnim.mode='attack'; _heroAnim.frame=0; _heroAnim.timer=0;
   var px=_pvp.player.x,bx=_pvp.boss.x,dist=Math.abs(bx-px);
   if(wpn.type==='ranged'){
     _pvp.projectiles.push({x:px+(_pvp.player.dir>0?20:-20),y:_pvp.player.y-30,
@@ -934,216 +639,7 @@ function _pvpSpawnParticles(x,y,color,count){
 }
 function _pvpShowHint(txt){if(typeof toast==='function')toast(txt,1000);}
 
-// ── REWARD SEQUENCE ───────────────────────────────────────────────
-var _rewardRAF = null;
-var _rewardParticles = [];
-var _rewardGifts = [];
-var _rewardState = { phase: 'idle', t: 0, flashAlpha: 0, titleScale: 0, titleAlpha: 0,
-  grinchY: 0, grinchAlpha: 0, grinchBounce: 0,
-  giftsPopped: 0, rewardItemsAlpha: [0,0], rewardItemsY: [0,0], done: false };
-
-function _pvpWin(){
-  if(_pvp.won)return;
-  _pvp.won=true;_pvp.over=true;PVP_RUNNING=false;
-  if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
-  var boss=_pvp.boss.data, time=Math.floor((Date.now()-_pvp.startTime)/1000);
-  // Apply rewards to state (existing architecture untouched)
-  if(window.S){
-    S.gifts=(S.gifts||0)+boss.reward.gifts;
-    S.grinch=(S.grinch||0)+boss.reward.grinch;
-    if(typeof save==='function')try{save();}catch(e){}
-  }
-  // Inject reward overlay CSS once
-  if(!document.getElementById('_pvpRewardStyle')){
-    var _rs=document.createElement('style');_rs.id='_pvpRewardStyle';
-    _rs.textContent=[
-      '@keyframes _rwd_trophy{0%{transform:scale(0) rotate(-20deg)}60%{transform:scale(1.25) rotate(5deg)}80%{transform:scale(0.95) rotate(-2deg)}100%{transform:scale(1) rotate(0)}}',
-      '@keyframes _rwd_grinch{0%{transform:translateY(60px) scale(0.5);opacity:0}50%{transform:translateY(-12px) scale(1.08);opacity:1}70%{transform:translateY(4px) scale(0.97);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}',
-      '@keyframes _rwd_float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}',
-      '@keyframes _rwd_shimmer{0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5}}',
-      '@keyframes _rwd_chip_in{0%{transform:translateY(30px) scale(0.6);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}',
-      '@keyframes _rwd_btn_pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,0.4)}50%{box-shadow:0 0 0 10px rgba(0,255,136,0)}}',
-      '@keyframes _rwd_scanline{0%{transform:translateY(-100%)}100%{transform:translateY(200%)}}',
-      '@keyframes _rwd_giftpop{0%{transform:scale(0) rotate(-30deg);opacity:1}60%{transform:scale(1.3) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:0.85}}',
-      '._rwd_overlay{position:absolute;inset:0;z-index:100;overflow:hidden;pointer-events:none;}',
-      '._rwd_overlay.active{pointer-events:auto;}',
-      '._rwd_scanline_bar{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,255,136,0.4),transparent);animation:_rwd_scanline 2s linear infinite;pointer-events:none;}',
-    ].join('');
-    document.head.appendChild(_rs);
-  }
-  setTimeout(function(){ _pvpShowRewardSequence(boss.reward, time); }, 400);
-}
-
-function _pvpShowRewardSequence(reward, time) {
-  var inner = document.getElementById('pvpBattleInner');
-  if(!inner) return;
-
-  // ── Build overlay HTML ────────────────────────────────────────────
-  var ol = document.createElement('div');
-  ol.id = '_pvpRewardOverlay';
-  ol.className = '_rwd_overlay active';
-  ol.style.cssText = 'background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;';
-
-  ol.innerHTML = [
-    // Scanline effect
-    '<div class="_rwd_scanline_bar"></div>',
-    // Radial glow BG
-    '<div id="_rwd_bg" style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 60%,rgba(0,80,30,0.0),#000);transition:background 1.2s;pointer-events:none;"></div>',
-    // Gift explosion canvas
-    '<canvas id="_rwd_canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>',
-    // ── Content stack ─────────────────────────────────────────────────
-    '<div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:18px;padding:0 20px;width:100%;">',
-      // GRINCH token animation
-      '<div id="_rwd_grinch" style="opacity:0;font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:700;letter-spacing:3px;color:#00ff88;text-shadow:0 0 18px rgba(0,255,136,0.9);margin-bottom:-6px;">',
-        '<span id="_rwd_grinch_txt" style="display:inline-block;">+GRINCH</span>',
-      '</div>',
-      // Trophy + ПОБЕДА
-      '<div id="_rwd_trophy" style="font-size:72px;line-height:1;transform:scale(0);filter:drop-shadow(0 0 20px rgba(0,255,136,0.6));">🏆</div>',
-      '<div id="_rwd_title" style="font-family:\'IBM Plex Mono\',monospace;font-size:28px;font-weight:900;letter-spacing:5px;color:#00ff88;text-shadow:0 0 28px rgba(0,255,136,0.9),0 0 60px rgba(0,255,136,0.4);opacity:0;transform:scale(0.6);">ПОБЕДА!</div>',
-      // Time
-      '<div id="_rwd_time" style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:2px;opacity:0;">⏱ '+time+' СЕК</div>',
-      // Reward chips
-      '<div id="_rwd_chips" style="display:flex;gap:12px;margin-top:4px;">',
-        '<div id="_rwd_chip0" style="opacity:0;transform:translateY(30px) scale(0.6);font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:700;color:#00ff88;background:rgba(0,255,136,0.06);border:1.5px solid rgba(0,255,136,0.25);border-radius:8px;padding:12px 18px;text-align:center;min-width:90px;">',
-          '<div style="font-size:22px;margin-bottom:4px;">🎁</div>',
-          '<div>+'+reward.gifts+'</div>',
-        '</div>',
-        '<div id="_rwd_chip1" style="opacity:0;transform:translateY(30px) scale(0.6);font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:700;color:#ffd700;background:rgba(255,215,0,0.06);border:1.5px solid rgba(255,215,0,0.25);border-radius:8px;padding:12px 18px;text-align:center;min-width:90px;">',
-          '<div style="font-size:22px;margin-bottom:4px;">🟢</div>',
-          '<div>+'+reward.grinch+' GRINCH</div>',
-        '</div>',
-      '</div>',
-      // CTA buttons (appear last)
-      '<div id="_rwd_btns" style="opacity:0;display:flex;gap:8px;width:100%;max-width:320px;margin-top:8px;">',
-        '<button class="pvp-btn" onclick="_pvpStartBoss()" style="flex:1;background:linear-gradient(135deg,#00ff88,#00cc6a);color:#000;font-weight:900;animation:_rwd_btn_pulse 2s infinite;">🔄 СНОВА</button>',
-        '<button class="pvp-btn" onclick="_pvpGoMenu()" style="flex:1;background:transparent;color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.1);">🏠 МЕНЮ</button>',
-      '</div>',
-    '</div>',
-  ].join('');
-
-  inner.appendChild(ol);
-
-  // ── Setup canvas for gift explosion ──────────────────────────────
-  var rwdCanvas = document.getElementById('_rwd_canvas');
-  if(rwdCanvas){
-    rwdCanvas.width = inner.offsetWidth || window.innerWidth;
-    rwdCanvas.height = inner.offsetHeight || window.innerHeight;
-  }
-
-  // ── Animate sequence with timed steps ────────────────────────────
-  var _giftEmojis = ['🎁','🎀','🎊','⭐','🌟','✨','💫','🎁','🎁'];
-  var _gifts = [];
-  var _giftRAF = null;
-
-  function _spawnGiftBurst(cx, cy, count) {
-    for(var i=0;i<count;i++){
-      var angle = (Math.PI*2/count)*i + Math.random()*0.4;
-      var speed = 5 + Math.random()*8;
-      _gifts.push({
-        x:cx, y:cy,
-        vx:Math.cos(angle)*speed,
-        vy:Math.sin(angle)*speed - 4,
-        emoji:_giftEmojis[Math.floor(Math.random()*_giftEmojis.length)],
-        life:1.0, decay:0.012+Math.random()*0.008,
-        size:18+Math.floor(Math.random()*16),
-        rot:Math.random()*Math.PI*2,
-        rotV:(Math.random()-0.5)*0.18,
-        gravity:0.28
-      });
-    }
-  }
-
-  function _tickGifts() {
-    if(!rwdCanvas) return;
-    var ctx2 = rwdCanvas.getContext('2d');
-    ctx2.clearRect(0,0,rwdCanvas.width,rwdCanvas.height);
-    _gifts = _gifts.filter(function(g){
-      g.x += g.vx; g.y += g.vy; g.vy += g.gravity;
-      g.vx *= 0.98; g.rot += g.rotV; g.life -= g.decay;
-      if(g.life <= 0) return false;
-      ctx2.save();
-      ctx2.globalAlpha = Math.min(1, g.life * 2);
-      ctx2.translate(g.x, g.y);
-      ctx2.rotate(g.rot);
-      ctx2.font = g.size+'px serif';
-      ctx2.textAlign = 'center';
-      ctx2.textBaseline = 'middle';
-      ctx2.fillText(g.emoji, 0, 0);
-      ctx2.restore();
-      return true;
-    });
-    if(_gifts.length > 0) _giftRAF = requestAnimationFrame(_tickGifts);
-  }
-
-  // ── Timed reveal sequence (fast arcade style) ─────────────────────
-  var W2 = (rwdCanvas ? rwdCanvas.width : window.innerWidth);
-  var H2 = (rwdCanvas ? rwdCanvas.height : window.innerHeight);
-
-  // Phase 1 — 0ms: flash + gift burst
-  var _bg = document.getElementById('_rwd_bg');
-  if(_bg) _bg.style.background = 'radial-gradient(ellipse at 50% 55%,rgba(0,140,50,0.35),#000 70%)';
-  ol.style.background = 'rgba(255,255,255,0.15)';
-  setTimeout(function(){ ol.style.background='#000'; }, 80);
-  _spawnGiftBurst(W2*0.5, H2*0.45, 32);
-  _spawnGiftBurst(W2*0.15, H2*0.55, 8);
-  _spawnGiftBurst(W2*0.85, H2*0.55, 8);
-  _tickGifts();
-
-  // Phase 2 — 80ms: trophy pops in
-  setTimeout(function(){
-    var trophy = document.getElementById('_rwd_trophy');
-    if(trophy){ trophy.style.transition='transform 0.4s cubic-bezier(0.34,1.56,0.64,1)'; trophy.style.transform='scale(1)'; }
-  }, 80);
-
-  // Phase 3 — 280ms: ПОБЕДА! + second burst
-  setTimeout(function(){
-    var title = document.getElementById('_rwd_title');
-    if(title){ title.style.transition='all 0.35s cubic-bezier(0.34,1.56,0.64,1)'; title.style.opacity='1'; title.style.transform='scale(1)'; }
-    _spawnGiftBurst(W2*0.5, H2*0.4, 16);
-  }, 280);
-
-  // Phase 4 — 450ms: +GRINCH counter drops in
-  setTimeout(function(){
-    var gr = document.getElementById('_rwd_grinch');
-    if(gr){
-      gr.style.transition='none'; gr.style.opacity='0'; gr.style.transform='translateY(-30px)';
-      var _gEl = document.getElementById('_rwd_grinch_txt');
-      var _target = reward.grinch, _cur = 0, _step = Math.ceil(_target/12);
-      function _countUp(){ _cur=Math.min(_cur+_step,_target); if(_gEl)_gEl.textContent='+'+_cur+' GRINCH'; if(_cur<_target)setTimeout(_countUp,35); }
-      _countUp();
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        gr.style.transition='all 0.35s cubic-bezier(0.34,1.56,0.64,1)';
-        gr.style.opacity='1'; gr.style.transform='translateY(0)';
-      }); });
-    }
-  }, 450);
-
-  // Phase 5 — 550ms: time + both chips at once
-  setTimeout(function(){
-    var t2=document.getElementById('_rwd_time');
-    if(t2){t2.style.transition='opacity 0.3s';t2.style.opacity='1';}
-    var c0=document.getElementById('_rwd_chip0');
-    if(c0){c0.style.transition='all 0.38s cubic-bezier(0.34,1.56,0.64,1)';c0.style.opacity='1';c0.style.transform='translateY(0) scale(1)';}
-  }, 550);
-  setTimeout(function(){
-    var c1=document.getElementById('_rwd_chip1');
-    if(c1){c1.style.transition='all 0.38s cubic-bezier(0.34,1.56,0.64,1)';c1.style.opacity='1';c1.style.transform='translateY(0) scale(1)';}
-    _spawnGiftBurst(W2*0.5, H2*0.6, 14);
-  }, 680);
-
-  // Phase 6 — 900ms: buttons + final burst
-  setTimeout(function(){
-    var btns=document.getElementById('_rwd_btns');
-    if(btns){btns.style.transition='opacity 0.35s';btns.style.opacity='1';}
-    _spawnGiftBurst(W2*0.5, H2*0.5, 18);
-  }, 900);
-
-  // Float on trophy only (not chips — too distracting)
-  setTimeout(function(){
-    var t=document.getElementById('_rwd_trophy');
-    if(t) t.style.animation='_rwd_float 2s ease-in-out infinite';
-  }, 1300);
-}
+// ── REWARD SEQUENCE — см. pvp_map_patch.js ─────────────────────────
 
 function _pvpLose(){
   if(_pvp.over)return;_pvp.over=true;PVP_RUNNING=false;
@@ -1234,12 +730,18 @@ function _pvpLoop(){
   // Волны
   _pvp.waves=_pvp.waves.filter(function(w){
     w.x+=w.vx;w.life--;
-    if(Math.abs(w.x-_pvp.player.x)<w.w/2+15&&_pvp.player.onGround){_pvpDamagePlayer(_rnd(5,12));return false;}
+    if(w.owner!=='player'&&Math.abs(w.x-_pvp.player.x)<w.w/2+15&&_pvp.player.onGround){_pvpDamagePlayer(_rnd(5,12));return false;}
     ctx.save();ctx.globalAlpha=w.life/w.maxL;ctx.fillStyle=w.color;ctx.shadowColor=w.color;ctx.shadowBlur=12;
     ctx.fillRect(w.x-w.w/2,w.y-w.h,w.w,w.h);ctx.fillRect(w.x-w.w/2-8,w.y-w.h*0.6,8,w.h*0.6);ctx.fillRect(w.x+w.w/2,w.y-w.h*0.6,8,w.h*0.6);
     ctx.shadowBlur=0;ctx.globalAlpha=1;ctx.restore();
     return w.life>0&&w.x>-50&&w.x<PVP_WORLD_W+50;
   });
+
+  // Тик анимации атаки
+  if(_pvp.attackAnim>0){
+    _pvp.attackAnim--;
+    if(_pvp.attackAnim<=0){ _pvp.player.state='idle'; }
+  }
 
   // Движение
   if(_pvpMoveDir!==0&&!_pvp.blocking&&!_pvp.over){
@@ -1415,60 +917,182 @@ function _pvpDrawFloor(ctx,W,H){
   ctx.shadowBlur=0;
   ctx.restore();
 }
+// ── HERO SPRITES — отдельные PNG из assets/hero/ ────────────────
+// walk_frame_01..07  — ходьба/idle
+// attack_flame_01..07 — атака (01-03 замах, 04 удар с эффектами, 05 нижняя стойка, 06 удар, 07 к стойке)
+// special_flame_01..05 + special_frame_06 — спецудар/прыжок
+//   01 готовность, 02 прыжок, 03 приземление+удар, 04 удар прямо, 05 красивая анимация, 06 стойка
+var _HS = { walk: [], attack: [], special: [] };
+var _heroAnim = { mode: 'walk', frame: 0, timer: 0 };
+// флаг: special анимация играет (не прерывать пока не закончится)
+var _heroSpecialLocked = false;
+// какие кадры special уже стрельнули эффект (чтобы не повторять)
+var _heroSpecialFiredFx = { f3: false, f4: false, f5: false };
+
+(function(){
+  function _load(src, arr){ var img=new Image(); img.onload=function(){arr.push(img);}; img.onerror=function(){arr.push(null);}; img.src=src; }
+  for(var i=1;i<=7;i++) _load('assets/hero/walk_frame_0'+i+'.png', _HS.walk);
+  ['attack_flame_01','attack_flame_02','attack_flame_03',
+   'attack_flame_04','attack_flame_05','attack_flame_06','attack_flame_07'
+  ].forEach(function(n){ _load('assets/hero/'+n+'.png', _HS.attack); });
+  ['special_flame_01','special_flame_02','special_flame_03',
+   'special_flame_04','special_flame_05','special_frame_06'
+  ].forEach(function(n){ _load('assets/hero/'+n+'.png', _HS.special); });
+})();
+
 function _pvpDrawPlayer(ctx,p){
-  var x=Math.round(p.x),y=Math.round(p.y);
+  var x=Math.round(p.x), y=Math.round(p.y);
+
+  // ── Тень ────────────────────────────────────────────────────────
   ctx.save();
-  if(p.dir<0){ctx.scale(-1,1);x=-x;}
-  // Тень на полу — мягкая, многослойная, масштабируется с высотой прыжка
-  var _shadowY = PVP_FLOOR; // тень всегда на полу, не на игроке
-  var _airDist = Math.max(0, _shadowY - p.y); // 0 на земле, растёт в воздухе
-  var _shadowScale = Math.max(0.45, 1 - _airDist * 0.008); // сжимается в воздухе
-  var _shadowAlpha = Math.max(0.18, 0.52 - _airDist * 0.005);
-  var _sw = Math.round(20 * _shadowScale);
-  var _sh = Math.round(5 * _shadowScale);
-  // Три слоя: внешний → внутренний (без blur, только alpha-stepped)
-  ctx.save();
-  ctx.globalAlpha = _shadowAlpha * 0.30;
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(x, _shadowY, _sw+5, _sh+3, 0, 0, Math.PI*2); ctx.fill();
-  ctx.globalAlpha = _shadowAlpha * 0.55;
-  ctx.beginPath(); ctx.ellipse(x, _shadowY, _sw, _sh, 0, 0, Math.PI*2); ctx.fill();
-  ctx.globalAlpha = _shadowAlpha * 0.80;
-  ctx.beginPath(); ctx.ellipse(x, _shadowY, Math.round(_sw*0.55), Math.round(_sh*0.7), 0, 0, Math.PI*2); ctx.fill();
+  var _shadowY=PVP_FLOOR, _airDist=Math.max(0,_shadowY-p.y);
+  var _ss=Math.max(0.45,1-_airDist*0.008), _sa=Math.max(0.18,0.52-_airDist*0.005);
+  var _sw=Math.round(20*_ss), _sh=Math.round(5*_ss);
+  ctx.globalAlpha=_sa*0.30; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(x,_shadowY,_sw+5,_sh+3,0,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=_sa*0.55;
+  ctx.beginPath(); ctx.ellipse(x,_shadowY,_sw,_sh,0,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=_sa*0.80;
+  ctx.beginPath(); ctx.ellipse(x,_shadowY,Math.round(_sw*0.55),Math.round(_sh*0.7),0,0,Math.PI*2); ctx.fill();
   ctx.restore();
-  // Зелёный glow вокруг персонажа
+
+  // ── Выбираем набор кадров ────────────────────────────────────────
+  // Определяем режим анимации
+  // special_flame:  0=готовность, 1=прыжок, 2=приземление(03), 3=удар(04), 4=красивая(05), 5=стойка(06)
+  var wantMode;
+  if(!p.onGround){
+    wantMode='special';
+    // При взлёте — запускаем special заново только если не играет
+    if(_heroAnim.mode!=='special'){ _heroSpecialLocked=true; _heroSpecialFiredFx={f3:false,f4:false,f5:false}; _heroAnim.mode='special'; _heroAnim.frame=0; _heroAnim.timer=0; }
+  } else if(_heroSpecialLocked){
+    // Приземлились — прыгаем на кадр 2 (03-приземление) если ещё на кадрах 0-1
+    wantMode='special';
+    if(_heroAnim.frame < 2){ _heroAnim.frame=2; _heroAnim.timer=0; }
+  } else if(p.state==='attack'||_pvp.attackAnim>0){
+    wantMode='attack';
+  } else {
+    wantMode='walk';
+  }
+
+  if(_heroAnim.mode !== wantMode){
+    _heroAnim.mode  = wantMode;
+    _heroAnim.frame = 0;
+    _heroAnim.timer = 0;
+  }
+
+  var frames = _HS[_heroAnim.mode] || _HS.walk;
+  // Атака — быстрее (fps 14), ходьба — 8, спецудар — 10
+  var fps = wantMode==='attack' ? 14 : (wantMode==='special' ? 10 : 8);
+  // Только walk зацикливается; attack и special — до конца, держат последний кадр
+  var loopAnim = (wantMode === 'walk');
+
+  // ── Тик анимации ─────────────────────────────────────────────────
+  // В воздухе: держим кадр 1 (прыжок) пока не приземлимся
+  var _holdInAir = (wantMode==='special' && !p.onGround && _heroAnim.frame >= 1);
+
+  _heroAnim.timer++;
+  if(_heroAnim.timer >= Math.round(60/fps)){
+    _heroAnim.timer = 0;
+    if(loopAnim){
+      _heroAnim.frame = (_heroAnim.frame+1) % frames.length;
+    } else if(_holdInAir){
+      _heroAnim.frame = 1; // держим кадр прыжка пока в воздухе
+    } else {
+      if(_heroAnim.frame < frames.length-1){
+        _heroAnim.frame++;
+      } else {
+        // special закончила — снимаем лок, следующий тик вернёт walk
+        if(wantMode==='special'){ _heroSpecialLocked=false; }
+      }
+    }
+  }
+
+  // ── Эффекты special по кадрам ──────────────────────────────────
+  if(wantMode==='special'){
+    var _spx=_pvp.player.x, _spy=_pvp.player.y;
+    var _bdir=_pvp.player.dir;
+    // Кадр 2 (03) — приземление: земляной удар, shockwave по полу
+    if(_heroAnim.frame===2 && !_heroSpecialFiredFx.f3){
+      _heroSpecialFiredFx.f3=true;
+      _pvp.screenShake=Math.max(_pvp.screenShake,10);
+      // Земляные частицы в стороны
+      for(var _ei=0;_ei<18;_ei++){
+        var _ea=Math.PI+(Math.random()-0.5)*1.2; // в стороны по полу
+        var _es=3+Math.random()*6;
+        _pvp.particles.push({x:_spx,y:_spy,vx:Math.cos(_ea)*_es,vy:Math.sin(_ea)*_es-1,
+          r:2+Math.random()*3,life:28+Math.random()*18,maxLife:46,color:Math.random()<0.5?'#a07040':'#c8a060'});
+      }
+      // Две волны в стороны
+      _pvp.waves.push({x:_spx,y:PVP_FLOOR-4,vx: 4.5,w:22,h:10,life:45,maxL:45,color:'#c89050',owner:'player'});
+      _pvp.waves.push({x:_spx,y:PVP_FLOOR-4,vx:-4.5,w:22,h:10,life:45,maxL:45,color:'#c89050',owner:'player'});
+      // Кольцо удара
+      if(_pvp.impactRings){
+        _pvp.impactRings.push({x:_spx,y:_spy-8,r:0,maxR:55,life:14,maxLife:14,color:'rgba(200,160,80,0.9)'});
+      }
+    }
+    // Кадр 3 (04) — удар прямо: slash + урон
+    if(_heroAnim.frame===3 && !_heroSpecialFiredFx.f4){
+      _heroSpecialFiredFx.f4=true;
+      _pvp.screenShake=Math.max(_pvp.screenShake,8);
+      _spawnSlashFX(_spx+_bdir*34, _spy-42, _bdir, 'sword', false);
+      _pvpSpawnParticles(_spx+_bdir*30,_spy-40,'#00ff88',8);
+      _pvpSpawnParticles(_spx+_bdir*30,_spy-40,'#ffffff',4);
+      if(_pvp.impactRings){
+        _pvp.impactRings.push({x:_spx+_bdir*30,y:_spy-44,r:0,maxR:44,life:10,maxLife:10,color:'rgba(0,255,136,0.8)'});
+      }
+      // Урон если рядом с боссом
+      if(Math.abs(_pvp.boss.x-_spx)<110){
+        var _sd4=_rnd(18,28);
+        _pvpDamageBoss(_sd4,true);
+        _bossPlayAnim('hurt',function(){_bossPlayAnim('walk');});
+      }
+    }
+    // Кадр 4 (05) — красивый удар: crit slash + сильный эффект
+    if(_heroAnim.frame===4 && !_heroSpecialFiredFx.f5){
+      _heroSpecialFiredFx.f5=true;
+      _pvp.screenShake=Math.max(_pvp.screenShake,13);
+      _spawnSlashFX(_spx+_bdir*38, _spy-50, _bdir, 'scythe', true);
+      _pvpSpawnParticles(_spx+_bdir*36,_spy-50,'#ffcc00',12);
+      _pvpSpawnParticles(_spx+_bdir*36,_spy-50,'#ff8800',7);
+      _pvpSpawnParticles(_spx+_bdir*36,_spy-50,'#ffffff',5);
+      if(_pvp.impactRings){
+        _pvp.impactRings.push({x:_spx+_bdir*36,y:_spy-52,r:0,maxR:70,life:14,maxLife:14,color:'rgba(255,200,0,0.9)'});
+        _pvp.impactRings.push({x:_spx+_bdir*36,y:_spy-52,r:0,maxR:42,life:10,maxLife:10,color:'rgba(255,255,255,0.6)'});
+      }
+      // Урон если рядом с боссом (более сильный)
+      if(Math.abs(_pvp.boss.x-_spx)<120){
+        var _sd5=_rnd(28,42);
+        _pvpDamageBoss(_sd5,true);
+        _bossPlayAnim('hurt',function(){_bossPlayAnim('walk');});
+      }
+    }
+  }
+
+  // ── Рисуем кадр ─────────────────────────────────────────────────
+  var img=frames[_heroAnim.frame];
+  ctx.save();
   if(_pvp.blocking){ctx.shadowColor='#0096ff';ctx.shadowBlur=20;}
   else{ctx.shadowColor='rgba(0,255,100,0.7)';ctx.shadowBlur=14;}
-  // Ноги
-  ctx.fillStyle='#1e4a1a';ctx.fillRect(x-8,y-14,7,14);ctx.fillRect(x+1,y-14,7,14);
-  ctx.fillStyle='#162e13';ctx.fillRect(x-10,y-5,9,5);ctx.fillRect(x+1,y-5,9,5);
-  // Тело
-  ctx.fillStyle='#2a5c26';ctx.fillRect(x-11,y-36,22,22);
-  ctx.fillStyle='#5a4020';ctx.fillRect(x-11,y-36,22,5);
-  ctx.fillStyle='#6b4f25';ctx.fillRect(x-11,y-31,4,17);ctx.fillRect(x+7,y-31,4,17);
-  // Руки
-  ctx.fillStyle='#3d8b37';ctx.fillRect(x-16,y-34,6,15);ctx.fillRect(x+10,y-34,6,15);
-  ctx.fillStyle='#2d6b28';ctx.fillRect(x-17,y-22,7,6);ctx.fillRect(x+10,y-22,7,6);
-  // Голова
-  ctx.fillStyle='#3d8b37';ctx.fillRect(x-11,y-56,22,20);
-  ctx.fillStyle='#1a3a18';ctx.fillRect(x-11,y-60,22,6);ctx.fillRect(x-13,y-56,4,12);ctx.fillRect(x+9,y-56,4,8);
-  ctx.fillStyle='#ffdd00';ctx.fillRect(x-7,y-50,5,5);ctx.fillRect(x+2,y-50,5,5);
-  ctx.fillStyle='#000';ctx.fillRect(x-6,y-49,2,3);ctx.fillRect(x+3,y-49,2,3);
-  ctx.fillStyle='#c8a87a';ctx.fillRect(x-4,y-41,8,3);
-  ctx.fillStyle='#fff';ctx.fillRect(x-3,y-42,2,3);ctx.fillRect(x+1,y-42,2,3);
-  // Оружие
-  var wpn=PVP_WEAPONS[_pvp.weapon];ctx.shadowBlur=0;
-  if(_pvp.weapon==='sword'){
-    ctx.fillStyle='#ddd';ctx.fillRect(x+14,y-38,3,26);
-    ctx.fillStyle=wpn.color;ctx.fillRect(x+10,y-30,11,3);
-    ctx.fillStyle='#8b6914';ctx.fillRect(x+15,y-20,2,8);
-  } else if(_pvp.weapon==='bow'){
-    ctx.strokeStyle='#8b6914';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x+16,y-24,14,-Math.PI*0.6,Math.PI*0.6);ctx.stroke();
-    ctx.strokeStyle='#f5c518';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+16,y-37);ctx.lineTo(x+16,y-11);ctx.stroke();
-  } else {
-    ctx.strokeStyle=wpn.color;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+12,y-8);ctx.lineTo(x+22,y-44);ctx.stroke();
-    ctx.beginPath();ctx.arc(x+26,y-44,11,Math.PI*0.7,Math.PI*1.9);ctx.stroke();
+
+  // Если текущий кадр не готов — ищем ближайший готовый кадр назад
+  if(!img || !img.complete || !img.naturalWidth){
+    for(var _fi2=_heroAnim.frame-1;_fi2>=0;_fi2--){
+      if(frames[_fi2]&&frames[_fi2].complete&&frames[_fi2].naturalWidth){img=frames[_fi2];break;}
+    }
   }
+  if(img && img.complete && img.naturalWidth>0){
+    var dstH = 100; // высота персонажа в пикселях
+    var dstW = Math.round(img.naturalWidth * (dstH / img.naturalHeight));
+    var dstX = x - Math.round(dstW / 2);
+    var dstY = y - dstH;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    if(p.dir < 0){ ctx.translate(x * 2, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(img, dstX, dstY, dstW, dstH);
+    ctx.restore();
+  }
+  // Fallback убран — не рисуем зелёного чела если PNG не загружен
   ctx.shadowBlur=0;ctx.restore();
 }
 

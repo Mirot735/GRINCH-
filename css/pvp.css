@@ -5,3 +5,77 @@
 .pvp-game-info { flex:1; }
 .pvp-game-name { font-size:16px; font-weight:700; margin-bottom:3px; }
 .pvp-game-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px; }
+
+/* ── PVP Battle UI (перенесено из pvp.js) ── */
+#s-pvp{background:#000!important;font-family:"IBM Plex Mono",monospace!important;}
+#s-pvp-battle{background:#000!important;}
+#pvpCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;}
+.pvp-btn{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:700;letter-spacing:2px;border:none;border-radius:4px;cursor:pointer;padding:12px 20px;-webkit-tap-highlight-color:transparent;}
+.pvp-wpn-btn{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;padding:8px 6px;border:1px solid rgba(0,255,136,0.35);background:rgba(0,10,6,0.72);color:rgba(0,255,136,0.6);flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;-webkit-tap-highlight-color:transparent;transition:all .15s;backdrop-filter:blur(4px);}
+.pvp-wpn-btn.active{border-color:#00ff88;background:rgba(0,255,136,0.12);color:#00ff88;box-shadow:0 0 10px rgba(0,255,136,0.45),inset 0 0 8px rgba(0,255,136,0.08);}
+.pvp-ctrl-btn{display:flex;align-items:center;justify-content:center;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:6px;font-size:20px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;}
+@keyframes pvpPhase{0%{opacity:0;transform:scale(0.5)}50%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1)}}
+@keyframes pvpNeonPulse{0%,100%{box-shadow:0 0 6px rgba(0,255,136,0.5),0 0 14px rgba(0,255,136,0.2),inset 0 0 6px rgba(0,255,136,0.06)}50%{box-shadow:0 0 10px rgba(0,255,136,0.8),0 0 22px rgba(0,255,136,0.35),inset 0 0 10px rgba(0,255,136,0.12)}}
+@keyframes pvpBlockPulse{0%,100%{border-color:rgba(60,160,255,0.5);box-shadow:0 0 8px rgba(60,160,255,0.4),inset 0 0 6px rgba(60,160,255,0.08)}50%{border-color:rgba(120,200,255,0.9);box-shadow:0 0 16px rgba(60,160,255,0.7),0 0 30px rgba(60,160,255,0.25),inset 0 0 12px rgba(60,160,255,0.15)}}
+.pvp-block-active{animation:pvpBlockPulse 0.5s infinite!important;}
+#pvpControls{position:absolute;bottom:0;left:0;right:0;height:96px;pointer-events:none;z-index:20;}
+#pvpCtrlLeft{position:absolute;bottom:10px;left:8px;display:flex;gap:6px;pointer-events:auto;}
+#pvpCtrlRight{position:absolute;bottom:10px;right:8px;display:flex;flex-direction:row;align-items:flex-end;gap:6px;pointer-events:auto;}
+#pvpCtrlSecondary{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:5px;pointer-events:auto;}
+.pvp-move-btn{
+width:58px;height:58px;border-radius:50%;
+background:rgba(0,8,4,0.68);
+border:1.5px solid rgba(0,255,136,0.45);
+box-shadow:0 0 8px rgba(0,255,136,0.30),0 0 18px rgba(0,255,136,0.10),inset 0 0 8px rgba(0,255,136,0.05);
+font-size:22px;color:rgba(0,255,136,0.70);
+cursor:pointer;-webkit-tap-highlight-color:transparent;
+display:flex;align-items:center;justify-content:center;
+backdrop-filter:blur(6px);transition:box-shadow .08s,background .08s;}
+.pvp-move-btn:active{
+background:rgba(0,255,136,0.14);
+border-color:rgba(0,255,136,0.95);
+box-shadow:0 0 14px rgba(0,255,136,0.75),0 0 28px rgba(0,255,136,0.30),inset 0 0 12px rgba(0,255,136,0.15);
+color:#00ff88;transform:scale(0.93);}
+.pvp-atk-btn{
+width:78px;height:78px;border-radius:50%;
+background:rgba(6,0,2,0.72);
+border:2px solid rgba(255,60,80,0.60);
+box-shadow:0 0 10px rgba(255,60,80,0.35),0 0 24px rgba(255,60,80,0.12),inset 0 0 10px rgba(255,60,80,0.06);
+font-size:32px;
+cursor:pointer;-webkit-tap-highlight-color:transparent;
+display:flex;align-items:center;justify-content:center;
+backdrop-filter:blur(6px);transition:box-shadow .08s,background .08s;}
+.pvp-atk-btn:active{
+background:rgba(255,60,80,0.18);
+border-color:rgba(255,80,100,0.98);
+box-shadow:0 0 18px rgba(255,60,80,0.80),0 0 36px rgba(255,60,80,0.35),inset 0 0 14px rgba(255,60,80,0.18);
+transform:scale(0.90);}
+.pvp-sec-btn{
+width:40px;height:40px;border-radius:50%;
+background:rgba(0,8,4,0.65);
+border:1.5px solid rgba(0,255,136,0.38);
+box-shadow:0 0 6px rgba(0,255,136,0.22),inset 0 0 5px rgba(0,255,136,0.04);
+font-size:16px;color:rgba(0,255,136,0.65);
+cursor:pointer;-webkit-tap-highlight-color:transparent;
+display:flex;align-items:center;justify-content:center;
+backdrop-filter:blur(5px);transition:box-shadow .08s,background .08s;}
+.pvp-sec-btn:active{
+background:rgba(0,255,136,0.16);
+border-color:rgba(0,255,136,0.95);
+box-shadow:0 0 12px rgba(0,255,136,0.65),0 0 22px rgba(0,255,136,0.22),inset 0 0 10px rgba(0,255,136,0.12);
+color:#00ff88;transform:scale(0.91);}
+.pvp-wpn-mini{
+width:36px;height:36px;border-radius:50%;
+background:rgba(0,8,4,0.62);
+border:1.5px solid rgba(0,255,136,0.28);
+box-shadow:0 0 4px rgba(0,255,136,0.14);
+font-size:15px;
+cursor:pointer;-webkit-tap-highlight-color:transparent;
+display:flex;align-items:center;justify-content:center;
+transition:all .12s;opacity:0.6;backdrop-filter:blur(4px);}
+.pvp-wpn-mini.active{
+opacity:1;
+border-color:rgba(0,255,136,0.90);
+background:rgba(0,255,136,0.13);
+box-shadow:0 0 10px rgba(0,255,136,0.55),0 0 20px rgba(0,255,136,0.18),inset 0 0 8px rgba(0,255,136,0.10);
+animation:pvpNeonPulse 2s ease-in-out infinite;}
