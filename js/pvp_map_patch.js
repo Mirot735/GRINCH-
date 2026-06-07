@@ -305,6 +305,9 @@ function _pvpWin(){
   if(_pvp.won)return;
   _pvp.won=true;_pvp.over=true;PVP_RUNNING=false;
   if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
+  if(typeof _pvpRemoveControls==="function")_pvpRemoveControls();
+  var _hud=document.getElementById('pvpHUD');if(_hud)_hud.style.display='none';
+  if(_pvp&&_pvp.canvas){var _fh=window.innerHeight;_pvp.canvas.height=_fh;_pvp.canvas.style.height=_fh+'px';_pvp.canvas.style.top='0';}
   var boss=_pvp.boss.data, time=Math.floor((Date.now()-_pvp.startTime)/1000);
   // Apply rewards to state (existing architecture untouched)
   if(window.S){
@@ -334,173 +337,566 @@ function _pvpWin(){
 }
 
 function _pvpShowRewardSequence(reward, time) {
-  var inner = document.getElementById('pvpBattleInner');
-  if(!inner) return;
+  var bossName = (_pvp.boss && _pvp.boss.data && _pvp.boss.data.name) ? _pvp.boss.data.name : 'ТРОЛЛЬ';
+  var dmgDealt = Math.round(_pvp.dmgDealt || 0);
+  var hitCount = _pvp.hitCount || 0;
 
-  // ── Build overlay HTML ────────────────────────────────────────────
-  var ol = document.createElement('div');
-  ol.id = '_pvpRewardOverlay';
-  ol.className = '_rwd_overlay active';
-  ol.style.cssText = 'background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;';
+  // Останавливаем canvas loop если ещё крутится
+  if(_pvp && _pvp.canvas) {
+    var _c = _pvp.canvas; _c.style.display = 'none';
+  }
 
-  ol.innerHTML = [
-    // Scanline effect
-    '<div class="_rwd_scanline_bar"></div>',
-    // Radial glow BG
-    '<div id="_rwd_bg" style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 60%,rgba(0,80,30,0.0),#000);transition:background 1.2s;pointer-events:none;"></div>',
-    // Gift explosion canvas
-    '<canvas id="_rwd_canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>',
-    // ── Content stack ─────────────────────────────────────────────────
-    '<div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:18px;padding:0 20px;width:100%;">',
-      // GRINCH token animation
-      '<div id="_rwd_grinch" style="opacity:0;font-family:\'IBM Plex Mono\',monospace;font-size:13px;font-weight:700;letter-spacing:3px;color:#00ff88;text-shadow:0 0 18px rgba(0,255,136,0.9);margin-bottom:-6px;">',
-        '<span id="_rwd_grinch_txt" style="display:inline-block;">+GRINCH</span>',
-      '</div>',
-      // Trophy + ПОБЕДА
-      '<div id="_rwd_trophy" style="font-size:72px;line-height:1;transform:scale(0);filter:drop-shadow(0 0 20px rgba(0,255,136,0.6));">🏆</div>',
-      '<div id="_rwd_title" style="font-family:\'IBM Plex Mono\',monospace;font-size:28px;font-weight:900;letter-spacing:5px;color:#00ff88;text-shadow:0 0 28px rgba(0,255,136,0.9),0 0 60px rgba(0,255,136,0.4);opacity:0;transform:scale(0.6);">ПОБЕДА!</div>',
-      // Time
-      '<div id="_rwd_time" style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:2px;opacity:0;">⏱ '+time+' СЕК</div>',
-      // Reward chips
-      '<div id="_rwd_chips" style="display:flex;gap:12px;margin-top:4px;">',
-        '<div id="_rwd_chip0" style="opacity:0;transform:translateY(30px) scale(0.6);font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:700;color:#00ff88;background:rgba(0,255,136,0.06);border:1.5px solid rgba(0,255,136,0.25);border-radius:8px;padding:12px 18px;text-align:center;min-width:90px;">',
-          '<div style="font-size:22px;margin-bottom:4px;">🎁</div>',
-          '<div>+'+reward.gifts+'</div>',
+  // Инжектим стили один раз
+  if(!document.getElementById('_pvpWinStyle')){
+    var _ws=document.createElement('style');_ws.id='_pvpWinStyle';
+    _ws.textContent=[
+      '@keyframes _win_in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}',
+      '@keyframes _win_pop{0%{transform:scale(0.5);opacity:0}65%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}',
+      '@keyframes _win_blink{0%,100%{opacity:1}50%{opacity:0}}',
+      '@keyframes _win_pulse{0%,100%{box-shadow:0 0 6px rgba(0,255,136,0.4),0 0 0 0 rgba(0,255,136,0.2)}50%{box-shadow:0 0 14px rgba(0,255,136,0.7),0 0 0 6px rgba(0,255,136,0)}}',
+      '@keyframes _win_scan{0%{top:-2px}100%{top:100%}}',
+      '#_pvpWin{position:fixed;inset:0;z-index:999;background:#000;font-family:"IBM Plex Mono",monospace;display:flex;flex-direction:column;overflow:hidden;}',
+      /* CRT scanline */
+      '#_pvpWin::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.18) 3px,rgba(0,0,0,0.18) 4px);pointer-events:none;z-index:10;}',
+      /* скользящая линия */
+      '#_pvpWin .win-scanline{position:absolute;left:0;right:0;height:2px;background:rgba(0,255,136,0.12);animation:_win_scan 3s linear infinite;pointer-events:none;z-index:11;}',
+      /* внешняя рамка */
+      '#_pvpWin .win-border{position:absolute;inset:6px;border:1px solid rgba(0,200,60,0.5);box-shadow:0 0 4px rgba(0,255,136,0.15);pointer-events:none;z-index:9;}',
+      /* топ-бар */
+      '#_pvpWin .win-topbar{display:flex;justify-content:space-between;padding:14px 20px 0;font-size:9px;letter-spacing:2px;color:rgba(0,255,136,0.5);flex-shrink:0;}',
+      /* зона босса */
+      '#_pvpWin .win-boss-zone{flex:0 0 auto;display:flex;align-items:flex-end;justify-content:center;position:relative;padding:10px 60px 0;}',
+      '#_pvpWin .win-boss-zone img.win-boss{width:72%;max-width:300px;display:block;image-rendering:pixelated;image-rendering:crisp-edges;}',
+      '#_pvpWin .win-torch{position:absolute;bottom:0;width:10%;max-width:44px;image-rendering:pixelated;image-rendering:crisp-edges;}',
+      '#_pvpWin .win-torch.left{left:10px;}',
+      '#_pvpWin .win-torch.right{right:10px;}',
+      /* body */
+      '#_pvpWin .win-body{flex:1;display:flex;flex-direction:column;padding:8px 12px 10px;gap:6px;overflow:hidden;}',
+      /* заголовки */
+      '#_pvpWin .win-sub{text-align:center;font-size:13px;font-weight:700;letter-spacing:3px;color:#00cc66;text-shadow:0 0 8px rgba(0,255,136,0.5);animation:_win_in .4s ease both;}',
+      '#_pvpWin .win-main{text-align:center;font-size:clamp(34px,9vw,48px);font-weight:900;letter-spacing:4px;color:#00ff88;text-shadow:0 0 16px rgba(0,255,136,0.7);animation:_win_pop .5s .1s ease both;}',
+      /* divider */
+      '#_pvpWin .win-div{height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,136,0.35),transparent);margin:0 8px;flex-shrink:0;}',
+      /* секция */
+      '#_pvpWin .win-sec{font-size:9px;font-weight:700;letter-spacing:3px;color:rgba(0,255,136,0.5);text-align:center;flex-shrink:0;}',
+      /* награды */
+      '#_pvpWin .win-rewards{display:flex;gap:8px;flex-shrink:0;animation:_win_in .4s .25s ease both;}',
+      '#_pvpWin .win-chip{flex:1;border-radius:4px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;gap:4px;}',
+      '#_pvpWin .win-chip.gold{background:rgba(80,55,0,0.5);border:1px solid rgba(210,160,0,0.7);}',
+      '#_pvpWin .win-chip.green{background:rgba(0,35,12,0.5);border:1px solid rgba(0,180,60,0.7);}',
+      '#_pvpWin .win-chip img{width:52px;height:52px;image-rendering:pixelated;image-rendering:crisp-edges;}',
+      '#_pvpWin .win-chip-val{font-size:clamp(20px,6vw,28px);font-weight:900;letter-spacing:1px;line-height:1.1;}',
+      '#_pvpWin .win-chip-val.gold{color:#f1c40f;text-shadow:0 0 8px rgba(241,196,15,0.5);}',
+      '#_pvpWin .win-chip-val.green{color:#00ff88;text-shadow:0 0 8px rgba(0,255,136,0.5);}',
+      '#_pvpWin .win-chip-sub{font-size:8px;font-weight:700;letter-spacing:2px;}',
+      '#_pvpWin .win-chip-sub.gold{color:rgba(210,160,0,0.8);}',
+      '#_pvpWin .win-chip-sub.green{color:rgba(0,180,60,0.8);}',
+      /* статистика горизонтально */
+      '#_pvpWin .win-stats{display:flex;gap:4px;flex-shrink:0;animation:_win_in .4s .4s ease both;}',
+      '#_pvpWin .win-stat{flex:1;border:1px solid rgba(0,255,136,0.18);border-radius:4px;background:rgba(0,10,4,0.8);padding:10px 6px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;}',
+      '#_pvpWin .win-stat img{width:32px;height:32px;image-rendering:pixelated;image-rendering:crisp-edges;opacity:0.9;flex-shrink:0;}',
+      '#_pvpWin .win-stat-info{display:flex;flex-direction:column;align-items:flex-start;}',
+      '#_pvpWin .win-stat-val{font-size:clamp(16px,4.5vw,22px);font-weight:700;color:rgba(255,255,255,0.9);white-space:nowrap;line-height:1.1;}',
+      '#_pvpWin .win-stat-val span{font-size:0.6em;opacity:0.6;margin-left:2px;}',
+      '#_pvpWin .win-stat-sub{font-size:7px;letter-spacing:1.5px;color:rgba(255,255,255,0.3);}',
+      /* кнопки */
+      '#_pvpWin .win-btns{display:flex;gap:8px;flex-shrink:0;animation:_win_pulse 2s 1s infinite,_win_in .4s .55s ease both;animation-fill-mode:both;}',
+      '#_pvpWin .win-btn{flex:1;height:clamp(46px,11vw,58px);border:none;border-radius:4px;font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,3vw,13px);font-weight:900;letter-spacing:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent;}',
+      '#_pvpWin .win-btn:active{opacity:0.75;transform:scale(0.97);}',
+      '#_pvpWin .win-btn img{width:18px;height:18px;image-rendering:pixelated;}',
+      '#_pvpWin .win-btn.primary{background:rgba(0,40,14,0.9);border:2px solid #00cc44;color:#00ff88;box-shadow:0 0 10px rgba(0,255,136,0.25);}',
+      '#_pvpWin .win-btn.secondary{background:rgba(15,15,15,0.9);border:1px solid rgba(100,100,100,0.4);color:rgba(160,160,160,0.6);}',
+      /* footer */
+      '#_pvpWin .win-footer{text-align:center;font-size:8px;letter-spacing:3px;color:rgba(0,255,136,0.18);flex-shrink:0;}',
+    ].join('');
+    document.head.appendChild(_ws);
+  }
+
+  // Удаляем старый если есть
+  var _old=document.getElementById('_pvpWin');
+  if(_old)_old.parentNode.removeChild(_old);
+
+  // Скрываем все оверлеи контролов
+  ['pvpControls','pvpJoystick','pvpControlsOverlay','pvpMobileControls'].forEach(function(id){
+    var el2=document.getElementById(id);if(el2)el2.style.display='none';
+  });
+  // Скрываем всё с z-index выше кнопок через класс
+  document.querySelectorAll('[id*="joystick"],[id*="control"],[id*="Control"],[id*="Joystick"]').forEach(function(el2){
+    if(el2.id!=='_pvpWin')el2.style.display='none';
+  });
+
+  var el=document.createElement('div');
+  el.id='_pvpWin';
+  el.innerHTML=[
+    '<div class="win-scanline"></div>',
+    '<div class="win-border"></div>',
+    '<div class="win-topbar"><span>● GRINCH GAME</span><span>// BOSS RAID</span></div>',
+    '<div class="win-boss-zone">',
+      '<img class="win-torch left" src="assets/ui/torch.png" alt="">',
+      '<img class="win-boss" src="assets/ui/boss_dead.png" alt="">',
+      '<img class="win-torch right" src="assets/ui/torch.png" alt="">',
+    '</div>',
+    '<div class="win-body">',
+      '<div class="win-sub">'+bossName.toUpperCase()+' ПОВЕРЖЕН!</div>',
+      '<div class="win-main">ПОБЕДА!</div>',
+      '<div class="win-div"></div>',
+      '<div class="win-sec">НАГРАДЫ</div>',
+      '<div class="win-rewards">',
+        '<div class="win-chip gold">',
+          '<img src="assets/ui/gift.png" alt="">',
+          '<div class="win-chip-val gold" id="_wg">+0</div>',
+          '<div class="win-chip-sub gold">ПОДАРКОВ</div>',
         '</div>',
-        '<div id="_rwd_chip1" style="opacity:0;transform:translateY(30px) scale(0.6);font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:700;color:#ffd700;background:rgba(255,215,0,0.06);border:1.5px solid rgba(255,215,0,0.25);border-radius:8px;padding:12px 18px;text-align:center;min-width:90px;">',
-          '<div style="font-size:22px;margin-bottom:4px;">🟢</div>',
-          '<div>+'+reward.grinch+' GRINCH</div>',
+        '<div class="win-chip green">',
+          '<img src="assets/ui/coin.png" alt="">',
+          '<div class="win-chip-val green" id="_wc">+0</div>',
+          '<div class="win-chip-sub green">GRINCH</div>',
         '</div>',
       '</div>',
-      // CTA buttons (appear last)
-      '<div id="_rwd_btns" style="opacity:0;display:flex;gap:8px;width:100%;max-width:320px;margin-top:8px;">',
-        '<button class="pvp-btn" onclick="_pvpStartBoss()" style="flex:1;background:linear-gradient(135deg,#00ff88,#00cc6a);color:#000;font-weight:900;animation:_rwd_btn_pulse 2s infinite;">🔄 СНОВА</button>',
-        '<button class="pvp-btn" onclick="_pvpGoMenu()" style="flex:1;background:transparent;color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.1);">🏠 МЕНЮ</button>',
+      '<div class="win-div"></div>',
+      '<div class="win-sec">СТАТИСТИКА</div>',
+      '<div class="win-stats">',
+        '<div class="win-stat"><img src="assets/ui/icon_time.png" alt=""><div class="win-stat-info"><div class="win-stat-val">'+time+' <span>СЕК</span></div><div class="win-stat-sub">ВРЕМЯ БОЯ</div></div></div>',
+        '<div class="win-stat"><img src="assets/ui/icon_damage.png" alt=""><div class="win-stat-info"><div class="win-stat-val" id="_wd">0</div><div class="win-stat-sub">УРОН</div></div></div>',
+        '<div class="win-stat"><img src="assets/ui/icon_hits.png" alt=""><div class="win-stat-info"><div class="win-stat-val" id="_wh">0</div><div class="win-stat-sub">ПОПАДАНИЙ</div></div></div>',
       '</div>',
+      '<div class="win-btns">',
+        '<button class="win-btn primary" id="_winBtnFight"><img src="assets/ui/icon_sword.png" onerror="this.style.display=\'none\'"> СНОВА В БОЙ</button>',
+        '<button class="win-btn secondary" id="_winBtnMenu"><img src="assets/ui/icon_home.png" onerror="this.style.display=\'none\'"> В МЕНЮ</button>',
+      '</div>',
+      '<div class="win-footer">· — // KEEP FIGHTING // — ·</div>',
     '</div>',
   ].join('');
+  document.body.appendChild(el);
 
-  inner.appendChild(ol);
+  // Вешаем обработчики через addEventListener — надёжнее onclick
+  document.getElementById('_winBtnFight').addEventListener('click', function(){
+    if(window._pvpWinCleanup){window._pvpWinCleanup();window._pvpWinCleanup=null;}
+    if(typeof _pvpStartBoss==='function')_pvpStartBoss();
+  });
+  document.getElementById('_winBtnMenu').addEventListener('click', function(){
+    if(window._pvpWinCleanup){window._pvpWinCleanup();window._pvpWinCleanup=null;}
+    if(typeof _pvpGoMenu==='function')_pvpGoMenu();
+    else if(typeof show==='function')show('menu');
+  });
 
-  // ── Setup canvas for gift explosion ──────────────────────────────
-  var rwdCanvas = document.getElementById('_rwd_canvas');
-  if(rwdCanvas){
-    rwdCanvas.width = inner.offsetWidth || window.innerWidth;
-    rwdCanvas.height = inner.offsetHeight || window.innerHeight;
+  // Счётчики
+  function _cnt(id, target, delay) {
+    setTimeout(function(){
+      var el2=document.getElementById(id); if(!el2)return;
+      var start=Date.now(), dur=600;
+      var prefix=id==='_wg'||id==='_wc'?'+':'';
+      (function tick(){
+        var p=Math.min(1,(Date.now()-start)/dur);
+        var v=Math.round(p*target);
+        el2.textContent=prefix+v;
+        if(p<1)requestAnimationFrame(tick);
+      })();
+    }, delay);
+  }
+  _cnt('_wg', reward.gifts||0,  350);
+  _cnt('_wc', reward.grinch||0, 350);
+  _cnt('_wd', dmgDealt,          500);
+  _cnt('_wh', hitCount,          500);
+
+  // Cleanup при уходе
+  window._pvpWinCleanup=function(){
+    var w=document.getElementById('_pvpWin');
+    if(w)w.parentNode.removeChild(w);
+    if(_pvp&&_pvp.canvas)_pvp.canvas.style.display='';
+  };
+  return; // дальше старый canvas-код не выполняется
+  // ---- DEAD CODE BELOW (старый canvas draw) ----
+  var canvas = _pvp && _pvp.canvas;
+  var ctx    = _pvp && _pvp.ctx;
+  if (!canvas || !ctx) return;
+  var dmgDealt2=dmgDealt; // prevent lint error
+  var hitCount = _pvp.hitCount || 0;
+
+  // ── Load assets ──────────────────────────────────────────────────
+  var A = {};
+  var loadTotal = 7, loadDone = 0;
+  function onLoad() { loadDone++; if (loadDone >= loadTotal && !_running) startScreen(); }
+  [
+    ['boss_dead',   'assets/ui/boss_dead.png'],
+    ['torch',       'assets/ui/torch.png'],
+    ['coin',        'assets/ui/coin.png'],
+    ['gift',        'assets/ui/gift.png'],
+    ['icon_time',   'assets/ui/icon_time.png'],
+    ['icon_damage', 'assets/ui/icon_damage.png'],
+    ['icon_hits',   'assets/ui/icon_hits.png'],
+  ].forEach(function(p) {
+    var im = new Image();
+    im.onload  = function() { A[p[0]] = im; onLoad(); };
+    im.onerror = function() { A[p[0]] = null; onLoad(); };
+    im.src = p[1];
+  });
+  setTimeout(function() { if (!_running) startScreen(); }, 700);
+
+  // ── State ────────────────────────────────────────────────────────
+  var _running = false;
+  var _raf = null, _startT = null;
+  var _hov = -1;
+  var _btnR = null, _btnM = null;
+  var _cntG = 0, _cntC = 0, _cntD = 0, _cntH = 0;
+
+  // ── Pointer ──────────────────────────────────────────────────────
+  function _pt(e) {
+    var rc = canvas.getBoundingClientRect();
+    var sx = canvas.width / rc.width, sy = canvas.height / rc.height;
+    var src = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    return { x: (src.clientX - rc.left)*sx, y: (src.clientY - rc.top)*sy };
+  }
+  function _inR(p, r) { return r && p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h; }
+  function _onMove(e) {
+    var p = _pt(e), prev = _hov;
+    _hov = _inR(p,_btnR)?0:_inR(p,_btnM)?1:-1;
+    if (_hov !== prev) draw(performance.now());
+  }
+  function _onDown(e) {
+    e.preventDefault(); e.stopPropagation();
+    var p = _pt(e);
+    if (_inR(p,_btnR)) { cleanup(); _pvpStartBoss(); }
+    else if (_inR(p,_btnM)) { cleanup(); _pvpGoMenu(); }
+  }
+  canvas.addEventListener('pointermove', _onMove, {passive:true});
+  canvas.addEventListener('pointerdown', _onDown, {passive:false});
+  canvas.addEventListener('touchstart',  _onDown, {passive:false});
+  function cleanup() {
+    cancelAnimationFrame(_raf);
+    canvas.removeEventListener('pointermove', _onMove);
+    canvas.removeEventListener('pointerdown', _onDown);
+    canvas.removeEventListener('touchstart',  _onDown);
   }
 
-  // ── Animate sequence with timed steps ────────────────────────────
-  var _giftEmojis = ['🎁','🎀','🎊','⭐','🌟','✨','💫','🎁','🎁'];
-  var _gifts = [];
-  var _giftRAF = null;
-
-  function _spawnGiftBurst(cx, cy, count) {
-    for(var i=0;i<count;i++){
-      var angle = (Math.PI*2/count)*i + Math.random()*0.4;
-      var speed = 5 + Math.random()*8;
-      _gifts.push({
-        x:cx, y:cy,
-        vx:Math.cos(angle)*speed,
-        vy:Math.sin(angle)*speed - 4,
-        emoji:_giftEmojis[Math.floor(Math.random()*_giftEmojis.length)],
-        life:1.0, decay:0.012+Math.random()*0.008,
-        size:18+Math.floor(Math.random()*16),
-        rot:Math.random()*Math.PI*2,
-        rotV:(Math.random()-0.5)*0.18,
-        gravity:0.28
-      });
-    }
+  // ── Helpers ──────────────────────────────────────────────────────
+  function rrect(x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+    ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+    ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+    ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+    ctx.closePath();
   }
+  function ease(t,d) { var x=Math.max(0,Math.min(1,t/d)); return x<.5?2*x*x:-1+(4-2*x)*x; }
+  function spring(t,d) { var x=Math.max(0,Math.min(1,t/d)); return x<.72?(x/.72)*1.10:1+(x-.72)/.28*(-.10); }
 
-  function _tickGifts() {
-    if(!rwdCanvas) return;
-    var ctx2 = rwdCanvas.getContext('2d');
-    ctx2.clearRect(0,0,rwdCanvas.width,rwdCanvas.height);
-    _gifts = _gifts.filter(function(g){
-      g.x += g.vx; g.y += g.vy; g.vy += g.gravity;
-      g.vx *= 0.98; g.rot += g.rotV; g.life -= g.decay;
-      if(g.life <= 0) return false;
-      ctx2.save();
-      ctx2.globalAlpha = Math.min(1, g.life * 2);
-      ctx2.translate(g.x, g.y);
-      ctx2.rotate(g.rot);
-      ctx2.font = g.size+'px serif';
-      ctx2.textAlign = 'center';
-      ctx2.textBaseline = 'middle';
-      ctx2.fillText(g.emoji, 0, 0);
-      ctx2.restore();
-      return true;
+  // ── DRAW ─────────────────────────────────────────────────────────
+  function draw(now) {
+    if (_startT === null) _startT = now;
+    var t  = now - _startT;
+    var W  = canvas.width;
+    var H  = canvas.height;
+    var pad = 8;
+    var gap = 8;
+
+    // Pixel-crisp rendering
+    ctx.imageSmoothingEnabled = false;
+
+    // ── BACKGROUND ──────────────────────────────────────────────────
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    // subtle green glow in boss zone
+    var gr = ctx.createRadialGradient(W*.5, H*.22, 0, W*.5, H*.22, W*.6);
+    gr.addColorStop(0,   'rgba(0,30,10,0.8)');
+    gr.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, W, H*0.55);
+
+    // ── OUTER BORDER ────────────────────────────────────────────────
+    ctx.save();
+    ctx.strokeStyle = '#00cc44';
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = '#00ff88';
+    ctx.shadowBlur  = 10;
+    ctx.strokeRect(pad, pad, W-pad*2, H-pad*2);
+    ctx.restore();
+
+    // Corner L-brackets
+    var bL = 16;
+    ctx.save();
+    ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 8;
+    [[pad,pad,1,1],[W-pad,pad,-1,1],[pad,H-pad,1,-1],[W-pad,H-pad,-1,-1]].forEach(function(c){
+      ctx.beginPath();
+      ctx.moveTo(c[0]+c[2]*bL, c[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(c[0], c[1]+c[3]*bL);
+      ctx.stroke();
     });
-    if(_gifts.length > 0) _giftRAF = requestAnimationFrame(_tickGifts);
+    ctx.restore();
+
+    // ── TOP BAR ─────────────────────────────────────────────────────
+    ctx.save();
+    ctx.font = '9px "IBM Plex Mono",monospace';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 5;
+    ctx.fillStyle = 'rgba(0,255,136,0.55)';
+    ctx.textAlign = 'left';  ctx.fillText('● GRINCH GAME', pad+10, pad+12);
+    ctx.textAlign = 'right'; ctx.fillText('// BOSS RAID',  W-pad-10, pad+12);
+    ctx.restore();
+
+    // ── TORCHES — clean drawImage, no code decorations ───────────────
+    var tW  = Math.round(W * 0.09);
+    var tH  = Math.round(tW * 2.2);
+    var tY  = pad + 28;
+    var tLx = Math.round(W * 0.05);
+    var tRx = W - tLx - tW;
+    var fl1 = 0.82 + 0.18*Math.sin(t*0.012);
+    var fl2 = 0.82 + 0.18*Math.sin(t*0.015+1.1);
+    var bossA = ease(t, 500);
+
+    if (A.torch) {
+      ctx.save();
+      ctx.globalAlpha = bossA * fl1;
+      ctx.shadowBlur = 0;
+      ctx.drawImage(A.torch, tLx, tY, tW, tH);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = bossA * fl2;
+      ctx.shadowBlur = 0;
+      ctx.drawImage(A.torch, tRx, tY, tW, tH);
+      ctx.restore();
+    }
+
+    // ── BOSS HEAD — clean drawImage, nothing drawn on top ────────────
+    var bossW  = Math.round(W * 0.56);
+    var bossH2 = Math.round(bossW * 0.88);
+    var bossX  = Math.round(W/2 - bossW/2);
+    var bossY  = Math.round(H * 0.05);
+
+    if (A.boss_dead) {
+      ctx.save();
+      ctx.globalAlpha = bossA;
+      ctx.drawImage(A.boss_dead, bossX, bossY, bossW, bossH2);
+      ctx.restore();
+    }
+
+    // ── TITLES ───────────────────────────────────────────────────────
+    var titleBaseY = bossY + bossH2 + 10;
+
+    var subA  = ease(t-400, 280);
+    var subSz = Math.max(10, Math.round(W * 0.036));
+    ctx.save();
+    ctx.globalAlpha = subA;
+    ctx.font = 'bold '+subSz+'px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 8;
+    ctx.fillStyle = '#00cc66';
+    ctx.fillText(bossName.toUpperCase()+' ПОВЕРЖЕН!', W/2, titleBaseY + subSz*0.8);
+    ctx.restore();
+
+    var titA  = ease(t-560, 320);
+    var titSc = spring(t-560, 320);
+    var titSz = Math.max(28, Math.round(W * 0.105));
+    var titCY = titleBaseY + subSz*2.0 + titSz*0.55;
+    ctx.save();
+    ctx.globalAlpha = titA;
+    ctx.translate(W/2, titCY); ctx.scale(titSc, titSc);
+    ctx.font = 'bold '+titSz+'px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 14 + 7*Math.sin(t*0.0022);
+    ctx.fillStyle = '#00ff88';
+    ctx.fillText('ПОБЕДА!', 0, 0);
+    ctx.restore();
+
+    // divider
+    var divY = titCY + titSz*0.65;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,255,136,0.2)'; ctx.lineWidth = 1; ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.moveTo(W*0.08, divY); ctx.lineTo(W*0.92, divY); ctx.stroke();
+    ctx.restore();
+
+    // ── REWARDS ──────────────────────────────────────────────────────
+    var rewA  = ease(t-820, 320);
+    var rewLY = divY + 14;
+
+    ctx.save(); ctx.globalAlpha = rewA*0.75;
+    ctx.font = 'bold 9px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 4;
+    ctx.fillStyle = '#00ff88';
+    ctx.fillText('НАГРАДЫ', W/2, rewLY);
+    ctx.restore();
+
+    if (t > 870) {
+      _cntG = Math.round(Math.min(1,(t-870)/480) * (reward.gifts||0));
+      _cntC = Math.round(Math.min(1,(t-870)/480) * (reward.grinch||0));
+    }
+
+    var rewY2 = rewLY + 10;
+    var rH    = Math.round(H * 0.115);
+    var cW    = (W - pad*2 - gap) / 2;
+    var icS   = Math.round(rH * 0.32); // icon size inside reward chip
+
+    // Reward chip LEFT (gifts) — green neon border on the chip only
+    ctx.save(); ctx.globalAlpha = rewA;
+    rrect(pad, rewY2, cW, rH, 8);
+    ctx.fillStyle = 'rgba(160,110,0,0.14)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(210,160,0,0.6)'; ctx.lineWidth = 1.5;
+    ctx.shadowColor = 'rgba(220,170,0,0.5)'; ctx.shadowBlur = 8;
+    ctx.stroke();
+    // gift icon — clean drawImage
+    if (A.gift) {
+      ctx.shadowBlur = 0;
+      ctx.drawImage(A.gift, pad+cW/2-icS/2, rewY2+rH*0.14, icS, icS);
+    }
+    ctx.font = 'bold '+Math.round(rH*0.28)+'px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f1c40f'; ctx.shadowColor = '#f1c40f'; ctx.shadowBlur = 10;
+    ctx.fillText('+'+_cntG, pad+cW/2, rewY2+rH*0.62);
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 9px "IBM Plex Mono",monospace';
+    ctx.fillStyle = 'rgba(210,160,0,0.8)';
+    ctx.fillText('ПОДАРКОВ', pad+cW/2, rewY2+rH*0.84);
+    ctx.restore();
+
+    // Reward chip RIGHT (grinch coin) — green neon border on the chip only
+    var c2x = pad+cW+gap;
+    ctx.save(); ctx.globalAlpha = rewA;
+    rrect(c2x, rewY2, cW, rH, 8);
+    ctx.fillStyle = 'rgba(0,70,25,0.14)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,200,70,0.6)'; ctx.lineWidth = 1.5;
+    ctx.shadowColor = 'rgba(0,200,70,0.5)'; ctx.shadowBlur = 8;
+    ctx.stroke();
+    // coin icon — clean drawImage
+    if (A.coin) {
+      ctx.shadowBlur = 0;
+      ctx.drawImage(A.coin, c2x+cW/2-icS/2, rewY2+rH*0.14, icS, icS);
+    }
+    ctx.font = 'bold '+Math.round(rH*0.28)+'px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#00ff88'; ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 10;
+    ctx.fillText('+'+_cntC, c2x+cW/2, rewY2+rH*0.62);
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 9px "IBM Plex Mono",monospace';
+    ctx.fillStyle = 'rgba(0,200,70,0.8)';
+    ctx.fillText('GRINCH', c2x+cW/2, rewY2+rH*0.84);
+    ctx.restore();
+
+    // ── STATS ────────────────────────────────────────────────────────
+    var stA  = ease(t-1100, 280);
+    var stY  = rewY2 + rH + 8;
+
+    ctx.save(); ctx.globalAlpha = stA*0.5;
+    ctx.font = 'bold 9px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#aaa'; ctx.shadowBlur = 0;
+    ctx.fillText('СТАТИСТИКА', W/2, stY+7);
+    ctx.restore();
+
+    stY += 14;
+    var sH   = Math.round(H * 0.09);
+    var sw3  = (W - pad*2 - 4) / 3;
+    var icoS = 24; // fixed icon size — crisp, no squash
+
+    if (t > 1150) {
+      var sp = Math.min(1,(t-1150)/380);
+      _cntD = Math.round(sp*dmgDealt);
+      _cntH = Math.round(sp*hitCount);
+    }
+
+    var statItems = [
+      {icon:'icon_time',   val:time+' СЕК', sub:'ВРЕМЯ БОЯ'},
+      {icon:'icon_damage', val:String(_cntD), sub:'УРОН'},
+      {icon:'icon_hits',   val:String(_cntH), sub:'ПОПАДАНИЙ'},
+    ];
+
+    statItems.forEach(function(sl, i) {
+      var sx2 = pad + i*(sw3+2);
+      ctx.save(); ctx.globalAlpha = stA;
+      // slot border only — no icon border
+      rrect(sx2, stY, sw3-2, sH, 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,255,136,0.2)'; ctx.lineWidth = 1; ctx.shadowBlur = 0;
+      ctx.stroke();
+
+      // icon — clean drawImage at fixed 24x24, left side
+      if (A[sl.icon]) {
+        ctx.globalAlpha = stA * 0.85;
+        ctx.shadowBlur = 0;
+        ctx.drawImage(A[sl.icon], sx2+7, stY + sH/2 - icoS/2, icoS, icoS);
+      }
+      ctx.globalAlpha = stA;
+
+      // value
+      ctx.font = 'bold '+Math.round(sH*0.33)+'px "IBM Plex Mono",monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.shadowBlur = 0;
+      ctx.fillText(sl.val, sx2 + sw3/2 + icoS*0.25, stY + sH*0.36);
+      // sublabel
+      ctx.font = '8px "IBM Plex Mono",monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.32)';
+      ctx.fillText(sl.sub, sx2 + sw3/2 + icoS*0.25, stY + sH*0.73);
+      ctx.restore();
+    });
+
+    // ── BUTTONS ──────────────────────────────────────────────────────
+    var btnA = ease(t-1350, 280);
+    var bY   = stY + sH + 6;
+    var bH   = Math.round(H * 0.078);
+    var bW   = (W - pad*2 - gap) / 2;
+
+    // СНОВА В БОЙ
+    _btnR = {x:pad, y:bY, w:bW, h:bH};
+    ctx.save(); ctx.globalAlpha = btnA;
+    rrect(pad, bY, bW, bH, 8);
+    ctx.fillStyle = _hov===0 ? 'rgba(0,255,136,0.18)' : 'rgba(0,50,18,0.7)';
+    ctx.fill();
+    ctx.strokeStyle = '#00cc44'; ctx.lineWidth = _hov===0 ? 2.5 : 1.5;
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = _hov===0 ? 18 : 6+4*Math.sin(t*0.004);
+    ctx.stroke();
+    ctx.font = 'bold '+Math.round(bH*0.30)+'px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#00ff88'; ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 6;
+    ctx.fillText('🗡  СНОВА В БОЙ', pad+bW/2, bY+bH/2);
+    ctx.restore();
+
+    // В МЕНЮ
+    _btnM = {x:pad+bW+gap, y:bY, w:bW, h:bH};
+    ctx.save(); ctx.globalAlpha = btnA;
+    rrect(pad+bW+gap, bY, bW, bH, 8);
+    ctx.fillStyle = _hov===1 ? 'rgba(255,255,255,0.07)' : 'rgba(25,25,25,0.6)';
+    ctx.fill();
+    ctx.strokeStyle = _hov===1 ? 'rgba(255,255,255,0.4)' : 'rgba(110,110,110,0.4)';
+    ctx.lineWidth = 1.5; ctx.shadowBlur = 0;
+    ctx.stroke();
+    ctx.font = 'bold '+Math.round(bH*0.30)+'px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(180,180,180,0.55)'; ctx.shadowBlur = 0;
+    ctx.fillText('🏠  В МЕНЮ', pad+bW+gap+bW/2, bY+bH/2);
+    ctx.restore();
+
+    // footer
+    ctx.save(); ctx.globalAlpha = btnA*0.22;
+    ctx.font = '8px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#00ff88'; ctx.shadowBlur = 0;
+    ctx.fillText('·  —  // KEEP FIGHTING //  —  ·', W/2, bY+bH+12);
+    ctx.restore();
+
+    _raf = requestAnimationFrame(draw);
   }
 
-  // ── Timed reveal sequence (fast arcade style) ─────────────────────
-  var W2 = (rwdCanvas ? rwdCanvas.width : window.innerWidth);
-  var H2 = (rwdCanvas ? rwdCanvas.height : window.innerHeight);
-
-  // Phase 1 — 0ms: flash + gift burst
-  var _bg = document.getElementById('_rwd_bg');
-  if(_bg) _bg.style.background = 'radial-gradient(ellipse at 50% 55%,rgba(0,140,50,0.35),#000 70%)';
-  ol.style.background = 'rgba(255,255,255,0.15)';
-  setTimeout(function(){ ol.style.background='#000'; }, 80);
-  _spawnGiftBurst(W2*0.5, H2*0.45, 32);
-  _spawnGiftBurst(W2*0.15, H2*0.55, 8);
-  _spawnGiftBurst(W2*0.85, H2*0.55, 8);
-  _tickGifts();
-
-  // Phase 2 — 80ms: trophy pops in
-  setTimeout(function(){
-    var trophy = document.getElementById('_rwd_trophy');
-    if(trophy){ trophy.style.transition='transform 0.4s cubic-bezier(0.34,1.56,0.64,1)'; trophy.style.transform='scale(1)'; }
-  }, 80);
-
-  // Phase 3 — 280ms: ПОБЕДА! + second burst
-  setTimeout(function(){
-    var title = document.getElementById('_rwd_title');
-    if(title){ title.style.transition='all 0.35s cubic-bezier(0.34,1.56,0.64,1)'; title.style.opacity='1'; title.style.transform='scale(1)'; }
-    _spawnGiftBurst(W2*0.5, H2*0.4, 16);
-  }, 280);
-
-  // Phase 4 — 450ms: +GRINCH counter drops in
-  setTimeout(function(){
-    var gr = document.getElementById('_rwd_grinch');
-    if(gr){
-      gr.style.transition='none'; gr.style.opacity='0'; gr.style.transform='translateY(-30px)';
-      var _gEl = document.getElementById('_rwd_grinch_txt');
-      var _target = reward.grinch, _cur = 0, _step = Math.ceil(_target/12);
-      function _countUp(){ _cur=Math.min(_cur+_step,_target); if(_gEl)_gEl.textContent='+'+_cur+' GRINCH'; if(_cur<_target)setTimeout(_countUp,35); }
-      _countUp();
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        gr.style.transition='all 0.35s cubic-bezier(0.34,1.56,0.64,1)';
-        gr.style.opacity='1'; gr.style.transform='translateY(0)';
-      }); });
-    }
-  }, 450);
-
-  // Phase 5 — 550ms: time + both chips at once
-  setTimeout(function(){
-    var t2=document.getElementById('_rwd_time');
-    if(t2){t2.style.transition='opacity 0.3s';t2.style.opacity='1';}
-    var c0=document.getElementById('_rwd_chip0');
-    if(c0){c0.style.transition='all 0.38s cubic-bezier(0.34,1.56,0.64,1)';c0.style.opacity='1';c0.style.transform='translateY(0) scale(1)';}
-  }, 550);
-  setTimeout(function(){
-    var c1=document.getElementById('_rwd_chip1');
-    if(c1){c1.style.transition='all 0.38s cubic-bezier(0.34,1.56,0.64,1)';c1.style.opacity='1';c1.style.transform='translateY(0) scale(1)';}
-    _spawnGiftBurst(W2*0.5, H2*0.6, 14);
-  }, 680);
-
-  // Phase 6 — 900ms: buttons + final burst
-  setTimeout(function(){
-    var btns=document.getElementById('_rwd_btns');
-    if(btns){btns.style.transition='opacity 0.35s';btns.style.opacity='1';}
-    _spawnGiftBurst(W2*0.5, H2*0.5, 18);
-  }, 900);
-
-  // Float on trophy only (not chips — too distracting)
-  setTimeout(function(){
-    var t=document.getElementById('_rwd_trophy');
-    if(t) t.style.animation='_rwd_float 2s ease-in-out infinite';
-  }, 1300);
+  function startScreen() {
+    if (_running) return; _running = true;
+    _startT = null;
+    _raf = requestAnimationFrame(draw);
+  }
 }
+
+// Патч: чистим HTML-экран победы при старте нового боя или выходе в меню
+(function(){
+  var _origStart = window._pvpStartBoss;
+  window._pvpStartBoss = function(){
+    if(window._pvpWinCleanup){ window._pvpWinCleanup(); window._pvpWinCleanup=null; }
+    if(_origStart) _origStart.apply(this, arguments);
+  };
+  var _origMenu = window._pvpGoMenu;
+  window._pvpGoMenu = function(){
+    if(window._pvpWinCleanup){ window._pvpWinCleanup(); window._pvpWinCleanup=null; }
+    if(_origMenu) _origMenu.apply(this, arguments);
+  };
+})();
 

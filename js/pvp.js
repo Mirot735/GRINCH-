@@ -157,7 +157,30 @@ function _pvpOpenBossLobby(){
 function openPVP(){_bossLoadSprite();_pvpInjectStyles();show('pvp');}
 
 function _pvpInjectStyles(){
-  // CSS перенесён в pvp.css
+  if(document.getElementById('_pvpStyle'))return;
+  var st=document.createElement('style');st.id='_pvpStyle';
+  st.textContent=[
+    '#s-pvp{background:#000!important;font-family:"IBM Plex Mono",monospace!important;}',
+    '#s-pvp-battle{background:#000!important;}',
+    '#pvpCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;}',
+    '.pvp-btn{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:700;letter-spacing:2px;border:none;border-radius:4px;cursor:pointer;padding:12px 20px;-webkit-tap-highlight-color:transparent;}',
+    '@keyframes pvpPhase{0%{opacity:0;transform:scale(0.5)}50%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1)}}',
+    '@keyframes pvpNeonPulse{0%,100%{box-shadow:0 0 6px rgba(0,255,136,0.5),0 0 14px rgba(0,255,136,0.2)}50%{box-shadow:0 0 10px rgba(0,255,136,0.8),0 0 22px rgba(0,255,136,0.35)}}',
+    '@keyframes pvpAtkPulse{0%,100%{box-shadow:0 0 16px rgba(255,60,80,0.50),0 0 36px rgba(255,60,80,0.18)}50%{box-shadow:0 0 24px rgba(255,60,80,0.80),0 0 52px rgba(255,60,80,0.35)}}',
+    /* Зональное управление */
+    '#pvpControls{position:absolute;inset:0;pointer-events:none;z-index:20;}',
+    '#pvpZoneLeft{position:absolute;left:0;top:0;width:50%;height:100%;pointer-events:auto;-webkit-tap-highlight-color:transparent;touch-action:none;}',
+    '#pvpZoneRight{position:absolute;right:0;top:0;width:50%;height:100%;pointer-events:auto;-webkit-tap-highlight-color:transparent;touch-action:none;}',
+    /* Кнопки атаки и прыжка */
+    '#pvpAtkBtn{position:absolute;bottom:24px;right:24px;width:82px;height:82px;border-radius:50%;background:rgba(6,0,2,0.55);border:2px solid rgba(255,60,80,0.55);box-shadow:0 0 14px rgba(255,60,80,0.40),inset 0 0 10px rgba(255,60,80,0.06);font-size:34px;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);touch-action:none;pointer-events:auto;}',
+    '#pvpJumpBtn{position:absolute;bottom:120px;right:28px;width:50px;height:50px;border-radius:50%;background:rgba(0,8,4,0.55);border:1.5px solid rgba(0,255,136,0.45);box-shadow:0 0 8px rgba(0,255,136,0.28),inset 0 0 6px rgba(0,255,136,0.05);font-size:18px;color:rgba(0,255,136,0.80);cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);touch-action:none;pointer-events:auto;}',
+    /* Ripple анимация при тапе */
+    '@keyframes pvpRipple{0%{transform:translate(-50%,-50%) scale(0);opacity:0.6;}100%{transform:translate(-50%,-50%) scale(1);opacity:0;}}',
+    '.pvp-ripple{position:absolute;width:90px;height:90px;border-radius:50%;background:rgba(0,255,136,0.18);border:1.5px solid rgba(0,255,136,0.35);pointer-events:none;animation:pvpRipple 0.4s ease-out forwards;}',
+    '#pvpAtkBtn:active{transform:scale(0.88);box-shadow:0 0 24px rgba(255,60,80,0.80),inset 0 0 14px rgba(255,60,80,0.15);}',
+    '#pvpJumpBtn:active{transform:scale(0.88);background:rgba(0,255,136,0.18);border-color:rgba(0,255,136,0.90);}',
+  ].join('');
+  document.head.appendChild(st);
 }
 function _pvpShowLobby(){return;}
 function _pvpPickWeapon(key){
@@ -261,6 +284,7 @@ function _pvpLaunchBattle() {
   _pvp.projectiles=[];_pvp.waves=[];_pvp.particles=[];
   _pvp.lastAtk=0;_pvp.lastBossAtk=0;_pvp.lastWave=0;_pvp.attackAnim=0;
   _pvp.over=false;_pvp.won=false;_pvp.startTime=Date.now();
+  _pvp.dmgDealt=0;_pvp.hitCount=0;
   _pvp.phase=0;_pvp.phaseShown=-1;_pvp.blocking=false;
   _pvp.lastFrame=Date.now();_pvp.screenShake=0;
   _pvp.bossHitFlash=0;_pvp.playerHitFlash=0;_pvp.impactRings=[];_pvp.screenRedFlash=0;
@@ -294,39 +318,53 @@ function _pvpLaunchBattle() {
     +'<div id="pvpPhaseBanner" style="position:absolute;top:56px;left:0;right:0;text-align:center;pointer-events:none;z-index:10;display:none;"><div id="pvpPhaseTxt" style="display:inline-block;font-family:\'IBM Plex Mono\',monospace;font-size:18px;font-weight:700;letter-spacing:4px;color:#ff4400;text-shadow:0 0 20px rgba(255,68,0,0.8);background:rgba(0,0,0,0.8);border:1px solid rgba(255,68,0,0.4);border-radius:4px;padding:6px 16px;">PHASE 2</div></div>'
     // Canvas (absolute, fills container)
     +'<canvas id="pvpCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;"></canvas>'
-    // Overlay controls
-    +'<div id="pvpControls">'
-      // Левый кластер — движение
-      +'<div id="pvpCtrlLeft">'
-        +'<button class="pvp-move-btn" onpointerdown="_pvpMove(-1)" onpointerup="_pvpStopMove()" onpointercancel="_pvpStopMove()">&#9664;</button>'
-        +'<button class="pvp-move-btn" onpointerdown="_pvpMove(1)" onpointerup="_pvpStopMove()" onpointercancel="_pvpStopMove()">&#9654;</button>'
-      +'</div>'
-      // Центр — оружия (мини)
-      +'<div id="pvpWpnRow" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto;"></div>'
-      // Правый кластер — secondary + атака
-      +'<div id="pvpCtrlRight">'
-        +'<div style="display:flex;flex-direction:column;gap:6px;align-items:center;">'
-          +'<button id="pvpBlockBtn" class="pvp-sec-btn" onpointerdown="_pvpBlockStart()" onpointerup="_pvpBlockEnd()" onpointercancel="_pvpBlockEnd()">&#128737;</button>'
-          +'<button class="pvp-sec-btn" onpointerdown="_pvpJump()">&#11014;</button>'
-        +'</div>'
-        +'<button class="pvp-atk-btn" onpointerdown="_pvpAttack()">&#9876;</button>'
-      +'</div>'
-    +'</div>'
   );
 
-  // Заполняем кнопки оружий (мини, круглые)
+  
+
+  // ── Controls — вешаем на #s-pvp-battle как position:absolute ────
+  // position:fixed ломается если у предка есть transform (TG WebApp).
+  // Вешаем на сам экран боя — он position:fixed/.screen без transform.
   setTimeout(function(){
-    var row = document.getElementById('pvpWpnRow');
-    if(!row) return;
-    var html = '';
-    Object.keys(PVP_WEAPONS).forEach(function(k){
-      var w = PVP_WEAPONS[k];
-      var active = _pvp.weapon===k ? ' active' : '';
-      html += '<button id="wpnBtn_'+k+'" class="pvp-wpn-mini'+active+'" onclick="_pvpSwitchWeapon(\''+k+'\')">'+w.emoji+'</button>';
-    });
-    // Блок теперь в правом кластере — из wpnRow убираем
-    row.innerHTML = html;
-  }, 0);
+    var _oldCtrl = document.getElementById('pvpControls');
+    if (_oldCtrl) _oldCtrl.parentNode.removeChild(_oldCtrl);
+
+    var _battleEl = document.getElementById('s-pvp-battle');
+    if (!_battleEl) return;
+
+    // Убедимся что s-pvp-battle — positioned контейнер
+    _battleEl.style.position = 'relative';
+
+    var _ctrl = document.createElement('div');
+    _ctrl.id = 'pvpControls';
+    _ctrl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;';
+
+    // Левая зона — движение (50% ширины, полная высота)
+    var _zl = document.createElement('div');
+    _zl.id = 'pvpZoneLeft';
+    _zl.style.cssText = 'position:absolute;left:0;top:0;width:35%;height:100%;pointer-events:auto;-webkit-tap-highlight-color:transparent;touch-action:none;';
+    _ctrl.appendChild(_zl);
+
+    // Кнопка прыжка
+    var _jBtn = document.createElement('button');
+    _jBtn.id = 'pvpJumpBtn';
+    _jBtn.innerHTML = '&#11014;';
+    _jBtn.style.cssText = 'position:absolute;bottom:120px;right:28px;width:50px;height:50px;border-radius:50%;background:rgba(0,8,4,0.55);border:1.5px solid rgba(0,255,136,0.45);box-shadow:0 0 8px rgba(0,255,136,0.28);font-size:18px;color:rgba(0,255,136,0.80);cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;touch-action:none;pointer-events:auto;';
+    _jBtn.addEventListener('pointerdown', function(e){ e.preventDefault(); _pvpJump(); }, {passive:false});
+    _ctrl.appendChild(_jBtn);
+
+    // Кнопка атаки
+    var _aBtn = document.createElement('button');
+    _aBtn.id = 'pvpAtkBtn';
+    _aBtn.innerHTML = '⚔️';
+    _aBtn.style.cssText = 'position:absolute;bottom:24px;right:24px;width:82px;height:82px;border-radius:50%;background:rgba(6,0,2,0.55);border:2px solid rgba(255,60,80,0.55);box-shadow:0 0 14px rgba(255,60,80,0.40);font-size:34px;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;touch-action:none;pointer-events:auto;';
+    _aBtn.addEventListener('pointerdown', function(e){ e.preventDefault(); _pvpAttack(); }, {passive:false});
+    _ctrl.appendChild(_aBtn);
+
+    _battleEl.appendChild(_ctrl);
+    // Инит джойстика — зона и контейнер уже в DOM
+    _pvpInitJoystick();
+  }, 50);
 
   // ── Запуск: растягиваем экран и canvas на всю высоту окна ─────────
   var _battleScreen = document.getElementById('s-pvp-battle');
@@ -402,6 +440,61 @@ function _pvpSwitchWeapon(key){_pvp.weapon=key;document.querySelectorAll('.pvp-w
 function _pvpBlockStart(){if(_pvp.over)return;_pvpStopMove();_pvp.blocking=true;var b=document.getElementById('pvpBlockBtn');if(b)b.classList.add('pvp-block-active');var i=document.getElementById('pvpBlockIcon');if(i)i.style.opacity='1';}
 function _pvpBlockEnd(){_pvp.blocking=false;var b=document.getElementById('pvpBlockBtn');if(b)b.classList.remove('pvp-block-active');var i=document.getElementById('pvpBlockIcon');if(i)i.style.opacity='0';}
 function _pvpJump(){if(_pvp.over||!_pvp.player||!_pvp.player.onGround)return;_pvp.player.vy=-12;_pvp.player.onGround=false;}
+
+// ── ВИРТУАЛЬНЫЙ ДЖОЙСТИК ─────────────────────────────────────────────
+function _pvpInitJoystick(){
+  var zoneL = document.getElementById('pvpZoneLeft');
+  if(!zoneL) return;
+
+  // ── Левая зона — движение ────────────────────────────────────────
+  // Поддержка мультитач: несколько пальцев одновременно
+  var _lPids = {}; // pointerId → направление
+
+  function _spawnRipple(zone, x, y){
+    var r = document.createElement('div');
+    r.className = 'pvp-ripple';
+    var rect = zone.getBoundingClientRect();
+    r.style.left = (x - rect.left) + 'px';
+    r.style.top  = (y - rect.top)  + 'px';
+    zone.appendChild(r);
+    setTimeout(function(){ if(r.parentNode) r.parentNode.removeChild(r); }, 420);
+  }
+
+  function _updateMoveFromPids(){
+    // Если хоть один палец есть — берём последний
+    var pids = Object.keys(_lPids);
+    if(pids.length === 0){ _pvpStopMove(); return; }
+    var last = _lPids[pids[pids.length-1]];
+    _pvpMove(last);
+  }
+
+  zoneL.addEventListener('pointerdown', function(e){
+    e.preventDefault();
+    zoneL.setPointerCapture(e.pointerId);
+    var rect = zoneL.getBoundingClientRect();
+    var mid  = rect.left + rect.width / 2;
+    var dir  = e.clientX < mid ? -1 : 1;
+    _lPids[e.pointerId] = dir;
+    _updateMoveFromPids();
+    _spawnRipple(zoneL, e.clientX, e.clientY);
+  }, {passive:false});
+
+  zoneL.addEventListener('pointermove', function(e){
+    if(!_lPids.hasOwnProperty(e.pointerId)) return;
+    e.preventDefault();
+    var rect = zoneL.getBoundingClientRect();
+    var mid  = rect.left + rect.width / 2;
+    _lPids[e.pointerId] = e.clientX < mid ? -1 : 1;
+    _updateMoveFromPids();
+  }, {passive:false});
+
+  function _lUp(e){
+    delete _lPids[e.pointerId];
+    _updateMoveFromPids();
+  }
+  zoneL.addEventListener('pointerup',     _lUp);
+  zoneL.addEventListener('pointercancel', _lUp);
+}
 
 function _pvpAttack(){
   if(_pvp.over||_pvp.blocking)return;
@@ -514,6 +607,8 @@ function _pvpBossWave(){
 function _pvpDamageBoss(dmg,kb){
   if(_pvp.boss.hp<=0)return;
   _pvp.boss.hp=Math.max(0,_pvp.boss.hp-dmg);
+  _pvp.dmgDealt=((_pvp.dmgDealt||0)+dmg);
+  _pvp.hitCount=((_pvp.hitCount||0)+1);
   _pvpShowDmgNum(dmg,_pvp.boss.x,_pvp.boss.y-60,'#00ff88');
   _pvpUpdateHUD();
   // ── Hit effects ──────────────────────────────────────────────────
@@ -641,9 +736,11 @@ function _pvpShowHint(txt){if(typeof toast==='function')toast(txt,1000);}
 
 // ── REWARD SEQUENCE — см. pvp_map_patch.js ─────────────────────────
 
+function _pvpRemoveControls(){var c=document.getElementById("pvpControls");if(c&&c.parentNode)c.parentNode.removeChild(c);}
 function _pvpLose(){
   if(_pvp.over)return;_pvp.over=true;PVP_RUNNING=false;
   if(PVP_RAF){cancelAnimationFrame(PVP_RAF);PVP_RAF=null;}
+  _pvpRemoveControls();
   setTimeout(function(){_pvpEndScreen(false,null,Math.floor((Date.now()-_pvp.startTime)/1000));},700);
 }
 
